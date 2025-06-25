@@ -2,13 +2,17 @@ mod perfect_arrows;
 
 use dioxus::logger::tracing;
 use dioxus::prelude::*;
-use dot_parser::{ast, canonical};
+use dot_parser::{
+    ast,
+    canonical::{self},
+};
 use perfect_arrows::{get_box_to_box_arrow, ArrowOptions, Pos2, Vec2};
 use std::{collections::HashMap, f64::consts::PI};
-use wasm_bindgen::prelude::*;
 
 const FAVICON: Asset = asset!("/assets/favicon.ico");
 const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
+
+type Att = (&'static str, &'static str);
 
 #[derive(Clone, Debug, PartialEq)]
 struct Data {
@@ -25,8 +29,8 @@ struct Node {
 #[derive(Clone, Debug, PartialEq)]
 struct Edge {
     id: String,
-    source: Node,
-    target: Node,
+    source: String,
+    target: String,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -43,62 +47,57 @@ fn main() {
 
 #[component]
 pub fn App() -> Element {
-    let graph_str = "graph { A -> B }";
-    let ast = ast::Graph::try_from(graph_str).unwrap();
-    let graph = canonical::Graph::from(ast.clone());
+    let initial_dot = r#"digraph G {
+        1 [label="Node 1"];
+        2 [label="Node 2"];
+        1 -> 2;
+    }"#;
 
-    for edge in graph.edges.set {
-        println!("{} -> {}", edge.from, edge.to);
-    }
+    // let ast = ast::Graph::try_from(graph_str).unwrap();
+    // let graph = canonical::Graph::from(ast.clone());
+    //
+    // for edge in graph.edges.set {
+    //     println!("{} -> {}", edge.from, edge.to);
+    // }
+    //
+    // let handle = |a_list: &ast::AttrList<(&str, &str)>| {
+    //     for element in a_list.elems.iter() {
+    //         for elem in &element.elems {
+    //             println!("Attribute: {} = {}", elem.0, elem.1);
+    //         }
+    //     }
+    // };
+    //
+    // let stmt_list = &ast.stmts;
+    //
+    // for stmt in stmt_list {
+    //     match stmt {
+    //         ast::Stmt::NodeStmt(node_stmt) => {
+    //             println!("Node: {}", node_stmt.node.id);
+    //         }
+    //         ast::Stmt::AttrStmt(ast::AttrStmt::Graph(attr_list)) => {
+    //             handle(attr_list);
+    //         }
+    //         ast::Stmt::AttrStmt(ast::AttrStmt::Node(attr_list)) => {
+    //             handle(attr_list);
+    //         }
+    //         ast::Stmt::Subgraph(subgraph) => {
+    //             println!(
+    //                 "Subgraph: {}",
+    //                 subgraph.id.clone().unwrap_or("Unidentified".to_string())
+    //             );
+    //             // recursively handle StmtList in subgraph
+    //             // &subgraph.stmts
+    //         }
+    //         _ => {}
+    //     }
+    // }
 
-    let handle = |a_list: &ast::AttrList<(&str, &str)>| {
-        for element in a_list.elems.iter() {
-            for elem in &element.elems {
-                println!("Attribute: {} = {}", elem.0, elem.1);
-            }
-        }
-    };
-
-    let stmt_list = &ast.stmts;
-
-    for stmt in stmt_list {
-        match stmt {
-            ast::Stmt::NodeStmt(node_stmt) => {
-                println!("Node: {}", node_stmt.node.id);
-            }
-            ast::Stmt::AttrStmt(ast::AttrStmt::Graph(attr_list)) => {
-                handle(attr_list);
-            }
-            ast::Stmt::AttrStmt(ast::AttrStmt::Node(attr_list)) => {
-                handle(attr_list);
-            }
-            ast::Stmt::Subgraph(subgraph) => {
-                println!(
-                    "Subgraph: {}",
-                    subgraph.id.clone().unwrap_or("Unidentified".to_string())
-                );
-                // recursively handle StmtList in subgraph
-                // &subgraph.stmts
-            }
-            _ => {}
-        }
-    }
-
-    let node_1 = Node {
-        id: "1".to_string(),
-        value: "Node 1".to_string(),
-    };
-    let node_2 = Node {
-        id: "2".to_string(),
-        value: "Node 2".to_string(),
-    };
-    let data = use_signal(|| Data {
-        nodes: vec![node_1.clone(), node_2.clone()],
-        edges: vec![Edge {
-            id: "e1".to_string(),
-            source: node_1,
-            target: node_2,
-        }],
+    let ast = use_signal(|| {
+        ast::Graph::try_from(initial_dot).unwrap_or_else(|_| {
+            // Fallback to empty graph on parse error
+            ast::Graph::try_from("digraph G { }").unwrap()
+        })
     });
     // Main render
     rsx! {
@@ -123,7 +122,7 @@ pub fn App() -> Element {
             }
 
             // Canvas component
-            Canvas { data }
+            Canvas { ast }
 
         }
     }
@@ -131,32 +130,55 @@ pub fn App() -> Element {
 
 /// Canvas component with "data-canvas": "true", data attribute
 #[component]
-fn Canvas(data: Signal<Data>) -> Element {
+fn Canvas(ast: Signal<dot_parser::ast::Graph<Att>>) -> Element {
+    let graph = canonical::Graph::from(ast.read().clone());
     rsx! {
         div {
             class: "relative h-full inset-0",
             "data-canvas": "true",
-            AllNodes { nodes: data.read().nodes.clone() }
-            AllEdgesWithMounted { edges: data.read().edges.clone() }
+            StmtListComponent { stmts: ast.read().stmts.clone() }
+            AllEdgesWithMounted { edges: graph.edges.set.iter().map(|edge| Edge {
+                id: format!("{}-{}", edge.from, edge.to),
+                source: edge.from.clone(),
+                target: edge.to.clone(),
+            }).collect() }
         }
     }
 }
 
 // Updated AllNodes component - add data attributes for easier selection
 #[component]
-fn AllNodes(nodes: Vec<Node>) -> Element {
+fn StmtListComponent(stmts: ast::StmtList<Att>) -> Element {
     rsx! {
-        // Render all nodes
-        {nodes.iter().map(|node| {
-            let left = node.id.parse::<i32>().unwrap() * 150 + 100; // Example positioning logic
-            let top = node.id.parse::<i32>().unwrap() * 150 + 100; // Example positioning logic
-            rsx! {
-                div {
-                    id: "{node.id}",
-                    class: "absolute bg-white border border-gray-300 rounded p-2 outline-none",
-                    style: format!("left: {left}px; top: {top}px;"),
-                    "data-node-id": "{node.id}",  // Add this for easier selection
-                    "{node.value} ({left}, {top})"
+        // Recurively render all node stmts
+        // Like in the commented code above, there may be a
+        // &subgraph.stmts which would be rendered again by this component
+        {stmts.into_iter().map(|stmt| {
+            match stmt {
+                ast::Stmt::NodeStmt(node_stmt) => {
+                    let node = &node_stmt.node;
+                    let label = format!("({})", node.id);
+                    tracing::debug!("Rendering node: {}", node.id);
+                    let left = node.id.parse::<i32>().unwrap_or(0) * 210;
+                    let top = node.id.parse::<i32>().unwrap_or(0) * 190;
+                    rsx! {
+                        div {
+                            id: "{node.id}",
+                            class: "absolute bg-white border border-gray-300 rounded p-2 outline-none",
+                            style: format!("left: {}px; top: {}px; width: 100px; height: 50px;", left, top),
+                            "{node.id}",
+                        }
+                    }
+                }
+                ast::Stmt::Subgraph(subgraph) => {
+                    // Recursively render subgraph stmts
+                    rsx! {
+                        StmtListComponent { stmts: subgraph.stmts }
+                    }
+                }
+                _ => {
+                    // Handle other statements if needed
+                    rsx! {}
                 }
             }
         })}
@@ -172,7 +194,7 @@ fn AllEdgesWithMounted(edges: Vec<Edge>) -> Element {
         let edges_clone = edges.clone();
         spawn(async move {
             // Small delay to ensure all sibling elements are rendered
-            gloo_timers::future::TimeoutFuture::new(100).await;
+            gloo_timers::future::TimeoutFuture::new(150).await;
 
             let mut new_paths = HashMap::new();
             for edge in edges_clone.iter() {
@@ -222,11 +244,11 @@ fn generate_arrow_path_safe(edge: &Edge) -> Result<EdgeSvgData, String> {
 
     // Much simpler and faster - direct ID lookup
     let source_el = document
-        .get_element_by_id(&edge.source.id)
+        .get_element_by_id(&edge.source)
         .ok_or("Source element not found")?;
 
     let target_el = document
-        .get_element_by_id(&edge.target.id)
+        .get_element_by_id(&edge.target)
         .ok_or("Target element not found")?;
 
     let canvas_el = source_el
