@@ -187,7 +187,8 @@ fn StmtListComponent(stmts: ast::StmtList<Att>) -> Element {
                                 .into_iter()
                                 .find_map(|(key, value)| {
                                     if key == "label" {
-                                        Some(value)
+                                        // Remove quotes from the label
+                                        Some(value.trim_matches('"'))
                                     } else {
                                         None
                                     }
@@ -212,21 +213,33 @@ fn StmtListComponent(stmts: ast::StmtList<Att>) -> Element {
                     let subgraph_id = subgraph.id.clone().unwrap_or_else(|| "cluster".to_string());
 
                     // Extract label and style from attributes
-                    let mut label = subgraph_id.clone();
+                    let mut label = "";
                     let mut style = "solid";
 
                     // Process all statements to find attributes
                     for sub_stmt in &subgraph.stmts {
-                        if let ast::Stmt::AttrStmt(ast::AttrStmt::Graph(attr_list)) = sub_stmt {
-                            for element in attr_list.elems.iter() {
-                                for elem in &element.elems {
-                                    if elem.0 == "label" {
-                                        label = elem.1.to_string();
-                                    } else if elem.0 == "style" {
-                                        style = elem.1;
+                        match sub_stmt {
+                            // Handle the IDEq variant which contains attributes like label and style
+                            ast::Stmt::IDEq(attr_name, attr_value) => {
+                                if attr_name == "label" {
+                                    label = attr_value.trim_matches('"');
+                                } else if attr_name == "style" {
+                                    style = attr_value.trim_matches('"');
+                                }
+                            }
+                            // Keep the original handling for AttrStmt as a fallback
+                            ast::Stmt::AttrStmt(ast::AttrStmt::Graph(attr_list)) => {
+                                for element in attr_list.elems.iter() {
+                                    for elem in &element.elems {
+                                        if elem.0 == "label" {
+                                            label = elem.1.trim_matches('"');
+                                        } else if elem.0 == "style" {
+                                            style = elem.1.trim_matches('"');
+                                        }
                                     }
                                 }
                             }
+                            _ => {}
                         }
                     }
 
@@ -246,7 +259,7 @@ fn StmtListComponent(stmts: ast::StmtList<Att>) -> Element {
                             }
 
                             // Render all children of the subgraph
-                            StmtListComponent { stmts: subgraph.stmts }
+                            StmtListComponent { stmts: subgraph.stmts.clone() }
                         }
                     }
                 }
