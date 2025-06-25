@@ -1,5 +1,8 @@
+mod perfect_arrows;
+
 use dioxus::logger::tracing;
 use dioxus::prelude::*;
+use perfect_arrows::{ArrowOptions, get_box_to_box_arrow};
 use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
 
@@ -85,10 +88,7 @@ pub fn App() -> Element {
     }
 
     // Use a hook to update coordinates whenever the component renders
-    // This replaces the problematic effect
     use_effect(move || {
-        // let mut coords = coords.clone();
-        
         spawn(async move {
             let mut result = HashMap::new();
             
@@ -156,23 +156,81 @@ pub fn App() -> Element {
         }
     });
 
-    // SVG connection - calculate line with fixed percentages
-    let (start_x, start_y, end_x, end_y) = {
-        // Box dimensions as percentage of viewport
-        let box_width_pct = 8.0;  // w-32 is roughly 8% of viewport
-        let box_height_pct = 4.0;  // h-16 is roughly 4% of viewport
-        
-        // Box A center (25% + half-width, 33% + half-height)
-        let x1 = 25.0 + (box_width_pct / 2.0);
-        let y1 = 33.0 + (box_height_pct / 2.0);
-        
-        // Box B center (66% + half-width, 66% + half-height)
-        let x2 = 66.0 + (box_width_pct / 2.0);
-        let y2 = 66.0 + (box_height_pct / 2.0);
-        
-        (x1, y1, x2, y2)
+    // Create arrow points using perfect_arrows
+let arrow_path = {
+    // Get the coordinates using the original percentage-based approach
+    // Box dimensions as percentage of viewport
+    let box_width_pct = 8.0;  // w-32 is roughly 8% of viewport
+    let box_height_pct = 4.0;  // h-16 is roughly 4% of viewport
+    
+    // Box A center (25% + half-width, 33% + half-height)
+    let x1_pct = 25.0 + (box_width_pct / 2.0);
+    let y1_pct = 33.0 + (box_height_pct / 2.0);
+    
+    // Box B center (66% + half-width, 66% + half-height)
+    let x2_pct = 66.0 + (box_width_pct / 2.0);
+    let y2_pct = 66.0 + (box_height_pct / 2.0);
+    
+    // Convert percentages to actual pixel values (for a 100x100 viewBox)
+    let start = perfect_arrows::Pos2 {
+        x: x1_pct as f32,
+        y: y1_pct as f32,
     };
+    
+    let end = perfect_arrows::Pos2 {
+        x: x2_pct as f32,
+        y: y2_pct as f32,
+    };
+    
+    // Box sizes in viewBox coordinates
+    let box_size = perfect_arrows::Vec2 {
+        x: box_width_pct as f32,
+        y: box_height_pct as f32,
+    };
+    
+    // Create arrow options
+    let options = ArrowOptions {
+        bow: 0.2,          // Moderate curve
+        stretch: 0.5,      // Moderate stretch
+        pad_start: 0.0,    // No padding at start
+        pad_end: 0.0,      // No padding at end
+        straights: false,  // Force curved arrows
+        ..ArrowOptions::default()
+    };
+    
+    // Get arrow points and angles
+    let (start_point, control_point, end_point, angle_end, _, _) = 
+        get_box_to_box_arrow(start, box_size.clone(), end, box_size.clone(), options);
+    
+    // Create SVG path for curved arrow
+    let path_d = format!(
+        "M {},{} Q {},{} {},{}",
+        start_point.x, start_point.y,
+        control_point.x, control_point.y,
+        end_point.x, end_point.y
+    );
+    
+    // Create arrowhead points based on end angle
+    let arrow_size = 2.0; // Size of the arrowhead in viewBox coordinates
+    let arrow_angle = angle_end as f64;
+    
+    let arrow_x = end_point.x as f64;
+    let arrow_y = end_point.y as f64;
+    
+    // Calculate arrowhead points
+    let angle1 = arrow_angle - 0.5; // Left side of arrowhead
+    let angle2 = arrow_angle + 0.5; // Right side of arrowhead
+    
+    let x1 = arrow_x - arrow_size * angle1.cos();
+    let y1 = arrow_y - arrow_size * angle1.sin();
+    let x2 = arrow_x - arrow_size * angle2.cos();
+    let y2 = arrow_y - arrow_size * angle2.sin();
+    
+    (path_d, arrow_x, arrow_y, x1, y1, x2, y2)
+};
 
+    // Render curved path
+    let (path_d, arrow_x, arrow_y, x1, y1, x2, y2) = arrow_path;
     // Main render
     rsx! {
         // Add stylesheets
@@ -192,27 +250,30 @@ pub fn App() -> Element {
             // Instructions
             div {
                 class: "absolute top-10 left-4 text-sm text-slate-600",
-                "A line is drawn between the centers of both boxes"
+                "Boxes connected with curved perfect arrows"
             }
             
             // Render all boxes
             {boxes}
             
-            // Always render the SVG line with fixed coordinates
+            // Render the curved arrow with perfect_arrows
             svg {
-                class: "fixed top-0 left-0 pointer-events-none z-10",
-                style: "width: 100vw; height: 100vh; overflow: visible;",
-                view_box: "0 0 100 100",
-                preserve_aspect_ratio: "none",
-                line {
-                    x1: "{start_x}",
-                    y1: "{start_y}",
-                    x2: "{end_x}",
-                    y2: "{end_y}",
-                    stroke: "red",
-                    stroke_width: "0.5"
-                }
-            }
-        }
+    class: "fixed top-0 left-0 pointer-events-none z-10",
+    style: "width: 100vw; height: 100vh; overflow: visible;",
+    view_box: "0 0 100 100",
+    preserve_aspect_ratio: "none",
+    
+    path {
+        d: "{path_d}",
+        fill: "none",
+        stroke: "red",
+        stroke_width: "0.5"
+    }
+    // Render arrowhead
+    polygon {
+        points: "{arrow_x},{arrow_y} {x1},{y1} {x2},{y2}",
+        fill: "red"
+    }
+}        }
     }
 }
