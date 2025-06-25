@@ -1,7 +1,7 @@
 mod perfect_arrows;
 
-use dioxus::logger::tracing;
 use dioxus::prelude::*;
+use dioxus::{html::tr, logger::tracing};
 use dot_parser::{
     ast,
     canonical::{self},
@@ -157,16 +157,33 @@ fn StmtListComponent(stmts: ast::StmtList<Att>) -> Element {
             match stmt {
                 ast::Stmt::NodeStmt(node_stmt) => {
                     let node = &node_stmt.node;
-                    let label = format!("({})", node.id);
+                    // get label from attributes, if option exists
+                    tracing::debug!("Node statement: {:?}", node_stmt);
+                    let label = node_stmt
+                        .attr
+                        .map(|attr| {
+                            attr.flatten()
+                                .into_iter()
+                                .find_map(|(key, value)| {
+                                    if key == "label" {
+                                        Some(value)
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .unwrap_or("No label")
+                        })
+                        .unwrap_or("No label");
+
                     tracing::debug!("Rendering node: {}", node.id);
                     let left = node.id.parse::<i32>().unwrap_or(0) * 210;
                     let top = node.id.parse::<i32>().unwrap_or(0) * 190;
                     rsx! {
                         div {
                             id: "{node.id}",
-                            class: "absolute bg-white border border-gray-300 rounded p-2 outline-none",
-                            style: format!("left: {}px; top: {}px; width: 100px; height: 50px;", left, top),
-                            "{node.id}",
+                            class: "absolute bg-white border border-gray-300 rounded p-2 outline-none w-fit",
+                            style: format!("left: {}px; top: {}px;", left, top),
+                            "{node.id}) {label}"
                         }
                     }
                 }
