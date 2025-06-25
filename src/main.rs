@@ -68,46 +68,6 @@ pub fn App() -> Element {
         3 -> 5 [label="bypass"];
     }"#;
 
-    // let ast = ast::Graph::try_from(graph_str).unwrap();
-    // let graph = canonical::Graph::from(ast.clone());
-    //
-    // for edge in graph.edges.set {
-    //     println!("{} -> {}", edge.from, edge.to);
-    // }
-    //
-    // let handle = |a_list: &ast::AttrList<(&str, &str)>| {
-    //     for element in a_list.elems.iter() {
-    //         for elem in &element.elems {
-    //             println!("Attribute: {} = {}", elem.0, elem.1);
-    //         }
-    //     }
-    // };
-    //
-    // let stmt_list = &ast.stmts;
-    //
-    // for stmt in stmt_list {
-    //     match stmt {
-    //         ast::Stmt::NodeStmt(node_stmt) => {
-    //             println!("Node: {}", node_stmt.node.id);
-    //         }
-    //         ast::Stmt::AttrStmt(ast::AttrStmt::Graph(attr_list)) => {
-    //             handle(attr_list);
-    //         }
-    //         ast::Stmt::AttrStmt(ast::AttrStmt::Node(attr_list)) => {
-    //             handle(attr_list);
-    //         }
-    //         ast::Stmt::Subgraph(subgraph) => {
-    //             println!(
-    //                 "Subgraph: {}",
-    //                 subgraph.id.clone().unwrap_or("Unidentified".to_string())
-    //             );
-    //             // recursively handle StmtList in subgraph
-    //             // &subgraph.stmts
-    //         }
-    //         _ => {}
-    //     }
-    // }
-
     let ast = use_signal(|| {
         ast::Graph::try_from(initial_dot).unwrap_or_else(|_| {
             // Fallback to empty graph on parse error
@@ -162,6 +122,7 @@ fn Canvas(ast: Signal<dot_parser::ast::Graph<Att>>) -> Element {
             "data-canvas": "true",
             div {
                 class: "bg-white rounded-xl shadow-lg p-6 min-w-[500px] flex flex-wrap items-start justify-center",
+                GraphLabelComponent { stmts: ast.read().stmts.clone() }
                 StmtListComponent { stmts: ast.read().stmts.clone() }
                 AllEdgesWithMounted { edges: graph.edges.set.iter().map(|edge| Edge {
                     id: format!("{}-{}", edge.from, edge.to),
@@ -173,6 +134,46 @@ fn Canvas(ast: Signal<dot_parser::ast::Graph<Att>>) -> Element {
     }
 }
 
+#[component]
+fn GraphLabelComponent(stmts: ast::StmtList<Att>) -> Element {
+    tracing::debug!("GraphLabelComponent called with statements: {:?}", stmts);
+    // Find graph label in statements
+    let graph_label: String = stmts
+        .into_iter()
+        .find_map(|stmt| {
+            match stmt {
+                // Check for labels in AttrStmt::Graph
+                ast::Stmt::AttrStmt(ast::AttrStmt::Graph(attr_list)) => {
+                    attr_list.elems.iter().find_map(|element| {
+                        element.elems.iter().find_map(|elem| {
+                            if elem.0 == "label" {
+                                Some(elem.1.trim_matches('"').to_string())
+                            } else {
+                                None
+                            }
+                        })
+                    })
+                }
+                // Also check for direct IDEq statements for label
+                ast::Stmt::IDEq(key, value) => {
+                    if key == "label" {
+                        Some(value.trim_matches('"').to_string())
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            }
+        })
+        .unwrap_or_else(|| "Graph".to_string());
+
+    rsx! {
+        h2 {
+            class: "w-full text-center text-xl font-bold text-slate-700 mb-4 border-b pb-2",
+            "{graph_label}"
+        }
+    }
+}
 // Updated AllNodes component - add data attributes for easier selection
 #[component]
 fn StmtListComponent(stmts: ast::StmtList<Att>) -> Element {
