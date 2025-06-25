@@ -146,13 +146,8 @@ pub fn get_box_to_box_arrow(
         angle_center + f64::max(MIN_ANGLE, combined_offset) * rot as f64
     };
 
-    let (dx0, dy0) = get_delta(
-        final_angle0
-            .rem_euclid(PI2)
-            .to_string()
-            .parse::<f64>()
-            .unwrap(),
-    );
+    let (dx0, dy0) = get_delta(final_angle0.rem_euclid(PI2));
+
     let ts =
         get_ray_rounded_rectangle_intersection(cx0, cy0, dx0, dy0, px0, py0, pw0, ph0, pad_start);
     let start_seg =
@@ -205,13 +200,8 @@ pub fn get_box_to_box_arrow(
             angle_center + PI - f64::max(combined_offset, MIN_ANGLE) * rot as f64
         };
 
-        let (dx1, dy1) = get_delta(
-            final_angle1
-                .rem_euclid(PI2)
-                .to_string()
-                .parse::<f64>()
-                .unwrap(),
-        );
+        let (dx1, dy1) = get_delta(final_angle1.rem_euclid(PI2));
+
         let te = &get_ray_rounded_rectangle_intersection(
             cx1, cy1, dx1, dy1, px1, py1, pw1, ph1, pad_end,
         )[0];

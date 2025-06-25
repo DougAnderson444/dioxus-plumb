@@ -2,6 +2,7 @@ mod perfect_arrows;
 
 use dioxus::logger::tracing;
 use dioxus::prelude::*;
+use dot_parser::{ast, canonical};
 use perfect_arrows::{get_box_to_box_arrow, ArrowOptions, Pos2, Vec2};
 use std::{collections::HashMap, f64::consts::PI};
 use wasm_bindgen::prelude::*;
@@ -42,6 +43,47 @@ fn main() {
 
 #[component]
 pub fn App() -> Element {
+    let graph_str = "graph { A -> B }";
+    let ast = ast::Graph::try_from(graph_str).unwrap();
+    let graph = canonical::Graph::from(ast.clone());
+
+    for edge in graph.edges.set {
+        println!("{} -> {}", edge.from, edge.to);
+    }
+
+    let handle = |a_list: &ast::AttrList<(&str, &str)>| {
+        for element in a_list.elems.iter() {
+            for elem in &element.elems {
+                println!("Attribute: {} = {}", elem.0, elem.1);
+            }
+        }
+    };
+
+    let stmt_list = &ast.stmts;
+
+    for stmt in stmt_list {
+        match stmt {
+            ast::Stmt::NodeStmt(node_stmt) => {
+                println!("Node: {}", node_stmt.node.id);
+            }
+            ast::Stmt::AttrStmt(ast::AttrStmt::Graph(attr_list)) => {
+                handle(attr_list);
+            }
+            ast::Stmt::AttrStmt(ast::AttrStmt::Node(attr_list)) => {
+                handle(attr_list);
+            }
+            ast::Stmt::Subgraph(subgraph) => {
+                println!(
+                    "Subgraph: {}",
+                    subgraph.id.clone().unwrap_or("Unidentified".to_string())
+                );
+                // recursively handle StmtList in subgraph
+                // &subgraph.stmts
+            }
+            _ => {}
+        }
+    }
+
     let node_1 = Node {
         id: "1".to_string(),
         value: "Node 1".to_string(),
@@ -92,7 +134,7 @@ pub fn App() -> Element {
 fn Canvas(data: Signal<Data>) -> Element {
     rsx! {
         div {
-            class: "relative h-full inset-0 border-4 border-orange-300",
+            class: "relative h-full inset-0",
             "data-canvas": "true",
             AllNodes { nodes: data.read().nodes.clone() }
             AllEdgesWithMounted { edges: data.read().edges.clone() }
@@ -106,13 +148,15 @@ fn AllNodes(nodes: Vec<Node>) -> Element {
     rsx! {
         // Render all nodes
         {nodes.iter().map(|node| {
+            let left = node.id.parse::<i32>().unwrap() * 150 + 100; // Example positioning logic
+            let top = node.id.parse::<i32>().unwrap() * 150 + 100; // Example positioning logic
             rsx! {
                 div {
                     id: "{node.id}",
-                    class: "absolute bg-white border border-gray-300 rounded p-2",
-                    style: format!("left: 100px; top: {}px;", node.id.parse::<i32>().unwrap() * 150 + 100),
+                    class: "absolute bg-white border border-gray-300 rounded p-2 outline-none",
+                    style: format!("left: {left}px; top: {top}px;"),
                     "data-node-id": "{node.id}",  // Add this for easier selection
-                    "{node.value}"
+                    "{node.value} ({left}, {top})"
                 }
             }
         })}
@@ -121,14 +165,14 @@ fn AllNodes(nodes: Vec<Node>) -> Element {
 
 #[component]
 fn AllEdgesWithMounted(edges: Vec<Edge>) -> Element {
-    let mut arrow_paths = use_signal(|| HashMap::<String, EdgeSvgData>::new());
+    let mut arrow_paths = use_signal(HashMap::<String, EdgeSvgData>::new);
 
     // This will be called after the component is mounted to the DOM
     let on_mounted = move |_| {
         let edges_clone = edges.clone();
         spawn(async move {
             // Small delay to ensure all sibling elements are rendered
-            gloo_timers::future::TimeoutFuture::new(50).await;
+            gloo_timers::future::TimeoutFuture::new(100).await;
 
             let mut new_paths = HashMap::new();
             for edge in edges_clone.iter() {
@@ -195,6 +239,8 @@ fn generate_arrow_path_safe(edge: &Edge) -> Result<EdgeSvgData, String> {
     let target = get_coords(&target_el);
     let canvas = get_coords(&canvas_el);
 
+    tracing::debug!("Source: {:?}, Target: {:?}", source, target);
+
     let x_0 = source.left - canvas.left;
     let y_0 = source.top - canvas.top;
     let x_1 = target.left - canvas.left;
@@ -205,17 +251,12 @@ fn generate_arrow_path_safe(edge: &Edge) -> Result<EdgeSvgData, String> {
     let w_1 = target.right - target.left;
     let h_1 = target.bottom - target.top;
 
-    let start = Pos2 {
-        x: x_0 + w_0 / 2.0,
-        y: y_0 + h_0 / 2.0,
-    };
+    let start = Pos2 { x: x_0, y: y_0 }; // Use top-left instead of center
+    let end = Pos2 { x: x_1, y: y_1 }; // Use top-left instead of center
+
+    tracing::debug!("Start: {:?}, End: {:?}", start, end);
 
     let start_size = Vec2 { x: w_0, y: h_0 };
-
-    let end = Pos2 {
-        x: x_1 + w_1 / 2.0,
-        y: y_1 + h_1 / 2.0,
-    };
 
     let end_size = Vec2 { x: w_1, y: h_1 };
 
