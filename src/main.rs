@@ -30,6 +30,13 @@ struct Rect {
     left: f64,
 }
 
+/// Struct for subgraphs
+#[derive(Clone, Debug, PartialEq)]
+struct SubgraphData {
+    id: String,
+    label: String,
+    style: String,
+}
 fn main() {
     dioxus::launch(App);
 }
@@ -37,9 +44,26 @@ fn main() {
 #[component]
 pub fn App() -> Element {
     let initial_dot = r#"digraph G {
-        1 [label="Node 1"];
-        2 [label="Node 2"];
-        1 -> 2;
+        subgraph cluster_0 {
+            label="Process A";
+            style="dashed";
+            1 [label="Start"];
+            2 [label="Process"];
+            3 [label="Decision"];
+            1 -> 2;
+            2 -> 3;
+        }
+        
+        subgraph cluster_1 {
+            label="Process B";
+            style="dashed";
+            4 [label="Output"];
+            5 [label="End"];
+            4 -> 5;
+        }
+        
+        3 -> 4;
+        3 -> 5 [label="bypass"];
     }"#;
 
     // let ast = ast::Graph::try_from(graph_str).unwrap();
@@ -88,6 +112,7 @@ pub fn App() -> Element {
             ast::Graph::try_from("digraph G { }").unwrap()
         })
     });
+
     // Main render
     rsx! {
         // Add stylesheets
@@ -96,23 +121,31 @@ pub fn App() -> Element {
 
         // Main container
         div {
-            class: "relative w-screen h-screen bg-slate-100",
+            class: "relative w-screen h-screen bg-gradient-to-br from-slate-50 to-slate-200 overflow-hidden flex flex-col",
 
-            // Title
+            // Header
             div {
-                class: "absolute top-4 left-4 text-xl font-bold",
-                "Connected Boxes Example"
-            }
-
-            // Instructions
-            div {
-                class: "absolute top-10 left-4 text-sm text-slate-600",
-                "Boxes connected with curved perfect arrows"
+                class: " bg-white shadow-sm border-b border-slate-200 p-4",
+                div {
+                    class: "container mx-auto flex items-center justify-between",
+                    div {
+                        h1 {
+                            class: "text-xl font-bold text-slate-800",
+                            "Graph Visualization"
+                        }
+                        p {
+                            class: "text-sm text-slate-600",
+                            "Interactive nodes with perfect arrows and nested subgraphs"
+                        }
+                    }
+                }
             }
 
             // Canvas component
-            Canvas { ast }
-
+            div {
+                class: "flex-1 overflow-hidden",
+                Canvas { ast }
+            }
         }
     }
 }
@@ -123,14 +156,17 @@ fn Canvas(ast: Signal<dot_parser::ast::Graph<Att>>) -> Element {
     let graph = canonical::Graph::from(ast.read().clone());
     rsx! {
         div {
-            class: "relative h-full inset-0",
+            class: "relative w-full h-full overflow-auto p-8 flex flex-col items-center justify-center",
             "data-canvas": "true",
-            StmtListComponent { stmts: ast.read().stmts.clone() }
-            AllEdgesWithMounted { edges: graph.edges.set.iter().map(|edge| Edge {
-                id: format!("{}-{}", edge.from, edge.to),
-                source: edge.from.clone(),
-                target: edge.to.clone(),
-            }).collect() }
+            div {
+                class: "bg-white rounded-xl shadow-lg p-6 min-w-[500px] flex flex-wrap items-start justify-center",
+                StmtListComponent { stmts: ast.read().stmts.clone() }
+                AllEdgesWithMounted { edges: graph.edges.set.iter().map(|edge| Edge {
+                    id: format!("{}-{}", edge.from, edge.to),
+                    source: edge.from.clone(),
+                    target: edge.to.clone(),
+                }).collect() }
+            }
         }
     }
 }
@@ -139,15 +175,11 @@ fn Canvas(ast: Signal<dot_parser::ast::Graph<Att>>) -> Element {
 #[component]
 fn StmtListComponent(stmts: ast::StmtList<Att>) -> Element {
     rsx! {
-        // Recurively render all node stmts
-        // Like in the commented code above, there may be a
-        // &subgraph.stmts which would be rendered again by this component
         {stmts.into_iter().map(|stmt| {
             match stmt {
                 ast::Stmt::NodeStmt(node_stmt) => {
                     let node = &node_stmt.node;
                     // get label from attributes, if option exists
-                    tracing::debug!("Node statement: {:?}", node_stmt);
                     let label = node_stmt
                         .attr
                         .map(|attr| {
@@ -165,21 +197,57 @@ fn StmtListComponent(stmts: ast::StmtList<Att>) -> Element {
                         .unwrap_or("No label");
 
                     tracing::debug!("Rendering node: {}", node.id);
-                    let left = node.id.parse::<i32>().unwrap_or(0) * 210;
-                    let top = node.id.parse::<i32>().unwrap_or(0) * 190;
+
                     rsx! {
                         div {
                             id: "{node.id}",
-                            class: "absolute bg-white border border-gray-300 rounded p-2 outline-none w-fit",
-                            style: format!("left: {}px; top: {}px;", left, top),
+                            class: "bg-white border border-gray-300 rounded-lg p-3 shadow-md hover:shadow-lg transition-all duration-200 m-2 min-w-[120px] cursor-pointer hover:bg-blue-50",
+                            "data-node": "true",
                             "{node.id}) {label}"
                         }
                     }
                 }
                 ast::Stmt::Subgraph(subgraph) => {
-                    // Recursively render subgraph stmts
+                    // Extract subgraph attributes
+                    let subgraph_id = subgraph.id.clone().unwrap_or_else(|| "cluster".to_string());
+
+                    // Extract label and style from attributes
+                    let mut label = subgraph_id.clone();
+                    let mut style = "solid";
+
+                    // Process all statements to find attributes
+                    for sub_stmt in &subgraph.stmts {
+                        if let ast::Stmt::AttrStmt(ast::AttrStmt::Graph(attr_list)) = sub_stmt {
+                            for element in attr_list.elems.iter() {
+                                for elem in &element.elems {
+                                    if elem.0 == "label" {
+                                        label = elem.1.to_string();
+                                    } else if elem.0 == "style" {
+                                        style = elem.1;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    let border_style = if style == "dashed" { "border-dashed" } else { "border-solid" };
+
+                    // Recursively render subgraph stmts in a container
                     rsx! {
-                        StmtListComponent { stmts: subgraph.stmts }
+                        div {
+                            id: "{subgraph_id}",
+                            class: "relative flex flex-wrap rounded-lg p-4 m-3 bg-slate-50 border-2 {border_style} border-slate-300",
+                            "data-subgraph": "true",
+
+                            // Subgraph label
+                            div {
+                                class: "absolute -top-3 left-4 px-2 bg-slate-50 text-sm font-medium text-slate-700",
+                                "{label}"
+                            }
+
+                            // Render all children of the subgraph
+                            StmtListComponent { stmts: subgraph.stmts }
+                        }
                     }
                 }
                 _ => {
@@ -200,7 +268,7 @@ fn AllEdgesWithMounted(edges: Vec<Edge>) -> Element {
         let edges_clone = edges.clone();
         spawn(async move {
             // Small delay to ensure all sibling elements are rendered
-            gloo_timers::future::TimeoutFuture::new(150).await;
+            gloo_timers::future::TimeoutFuture::new(200).await;
 
             let mut new_paths = HashMap::new();
             for edge in edges_clone.iter() {
@@ -214,7 +282,7 @@ fn AllEdgesWithMounted(edges: Vec<Edge>) -> Element {
 
     rsx! {
         svg {
-            class: "absolute top-0 left-0 float-left w-full h-full pointer-events-auto overflow-visible",
+            class: "absolute top-0 left-0 w-full h-full pointer-events-none overflow-visible",
             onmounted: on_mounted,
             {arrow_paths.read().iter().map(|(edge_id, svg_data)| {
                 rsx! {
@@ -223,12 +291,12 @@ fn AllEdgesWithMounted(edges: Vec<Edge>) -> Element {
                         path {
                             d: "{svg_data.path}",
                             fill: "none",
-                            stroke: "black",
-                            "stroke-width": "2"
+                            stroke: "#4b5563", // gray-600
+                            "stroke-width": "2.5"
                         }
                         polygon {
-                            points: "-6,-3 0,0 -6,3",
-                            fill: "black",
+                            points: "-6,-4 0,0 -6,4",
+                            fill: "#4b5563", // gray-600
                             transform: "{svg_data.arrow_transform}"
                         }
                     }
