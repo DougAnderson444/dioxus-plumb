@@ -8,6 +8,7 @@ use dot_parser::{
 };
 use perfect_arrows::{get_box_to_box_arrow, ArrowOptions, Pos2, Vec2};
 use std::{collections::HashMap, f64::consts::PI};
+use wasm_bindgen::{prelude::*, JsCast};
 
 const FAVICON: Asset = asset!("/assets/favicon.ico");
 const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
@@ -275,16 +276,30 @@ fn StmtListComponent(stmts: ast::StmtList<Att>) -> Element {
 #[component]
 fn AllEdgesWithMounted(edges: Vec<Edge>) -> Element {
     let mut arrow_paths = use_signal(HashMap::<String, EdgeSvgData>::new);
+    let edges_ref = use_signal(|| edges.clone());
+    let mut initial_load = use_signal(|| true);
 
-    // This will be called after the component is mounted to the DOM
-    let on_mounted = move |_| {
-        let edges_clone = edges.clone();
+    // Store window dimensions to trigger recalculation
+    let mut window_size = use_signal(|| {
+        let window = web_sys::window().unwrap();
+        (
+            window.inner_width().unwrap().as_f64().unwrap() as i32,
+            window.inner_height().unwrap().as_f64().unwrap() as i32,
+        )
+    });
+
+    // Function to calculate all arrows
+    let calculate_arrows = move || {
+        let edges_to_calculate = edges_ref.read().clone();
         spawn(async move {
             // Small delay to ensure all sibling elements are rendered
-            gloo_timers::future::TimeoutFuture::new(200).await;
+            if *initial_load.read() {
+                gloo_timers::future::TimeoutFuture::new(150).await;
+            }
+            initial_load.set(false);
 
             let mut new_paths = HashMap::new();
-            for edge in edges_clone.iter() {
+            for edge in edges_to_calculate.iter() {
                 if let Ok(svg_data) = generate_arrow_path_safe(edge) {
                     new_paths.insert(edge.id.clone(), svg_data);
                 }
@@ -293,10 +308,39 @@ fn AllEdgesWithMounted(edges: Vec<Edge>) -> Element {
         });
     };
 
+    // Set up resize listener using use_effect
+    use_effect(move || {
+        let window = web_sys::window().unwrap();
+
+        // Use Box::new with FnMut and wrap it as a Box<dyn FnMut()>
+        let update_size = Closure::wrap(Box::new(move || {
+            let window = web_sys::window().unwrap();
+            let w = window.inner_width().unwrap().as_f64().unwrap() as i32;
+            let h = window.inner_height().unwrap().as_f64().unwrap() as i32;
+            window_size.set((w, h));
+        }) as Box<dyn FnMut()>); // Note: FnMut instead of Fn
+
+        window
+            .add_event_listener_with_callback("resize", update_size.as_ref().unchecked_ref())
+            .unwrap();
+
+        // Keep the closure alive for the lifetime of the component
+        update_size.forget();
+
+        // Calculate arrows initially
+        calculate_arrows();
+    });
+
+    // React to window size changes
+    use_effect(move || {
+        // The dependency on window_size will cause this to run when window size changes
+        let _ = *window_size.read();
+        calculate_arrows();
+    });
+
     rsx! {
         svg {
             class: "absolute top-0 left-0 w-full h-full pointer-events-none overflow-visible",
-            onmounted: on_mounted,
             {arrow_paths.read().iter().map(|(edge_id, svg_data)| {
                 rsx! {
                     g {
