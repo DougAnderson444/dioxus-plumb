@@ -2,35 +2,38 @@ mod perfect_arrows;
 
 use dioxus::logger::tracing;
 use dioxus::prelude::*;
-use perfect_arrows::{ArrowOptions, get_box_to_box_arrow};
-use std::collections::HashMap;
+use perfect_arrows::{get_box_to_box_arrow, ArrowOptions, Pos2, Vec2};
+use std::{collections::HashMap, f64::consts::PI};
 use wasm_bindgen::prelude::*;
 
 const FAVICON: Asset = asset!("/assets/favicon.ico");
 const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
 
-// Each box will have an ID and a ref to access its DOM node.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct BoxId(&'static str);
-
-/// Represents the position and dimensions of a rectangle on screen
-#[derive(Debug, Clone, Copy)]
-struct Rect {
-    /// X coordinate of the top-left corner
-    x: f64,
-    /// Y coordinate of the top-left corner
-    y: f64,
-    /// Width of the rectangle
-    width: f64,
-    /// Height of the rectangle
-    height: f64,
+#[derive(Clone, Debug, PartialEq)]
+struct Data {
+    nodes: Vec<Node>,
+    edges: Vec<Edge>,
 }
 
-impl Rect {
-    /// Returns the center point of the rectangle as (x, y) coordinates
-    fn center(&self) -> (f64, f64) {
-        (self.x + self.width / 2.0, self.y + self.height / 2.0)
-    }
+#[derive(Clone, Debug, PartialEq, Hash, Eq)]
+struct Node {
+    id: String,
+    value: String,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct Edge {
+    id: String,
+    source: Node,
+    target: Node,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct Rect {
+    top: f64,
+    right: f64,
+    bottom: f64,
+    left: f64,
 }
 
 fn main() {
@@ -39,241 +42,219 @@ fn main() {
 
 #[component]
 pub fn App() -> Element {
-    // Track references to each box
-    let box_ids = [BoxId("a"), BoxId("b")];
-    let refs: HashMap<_, _> = box_ids
-        .iter()
-        .map(|id| (id.clone(), use_signal(|| Option::<Event<MountedData>>::None)))
-        .collect();
-
-    // Store coordinates for each box
-    let mut coords = use_signal(HashMap::<BoxId, Rect>::new);
-
-    // Signal to trigger coordinate updates
-    let update_trigger = use_signal(|| 0);
-
-    // Effect for handling window resize
-    {
-        use_effect(move || {
-            // Create a resize listener that simply increments the counter
-            if let Some(window) = web_sys::window() {
-                // Define the handler function
-                let mut trigger = update_trigger;
-                let mut handler = move || {
-                    // Simply increment the counter to trigger a re-render
-                    trigger.with_mut(|count| *count += 1);
-                };
-                
-                // Create a static JS function for the resize event
-                let mut handler_clone = handler;
-                let closure = Closure::wrap(Box::new(move |_: web_sys::Event| {
-                    handler_clone();
-                }) as Box<dyn FnMut(_)>);
-                
-                // Register the event
-                let _ = window.add_event_listener_with_callback(
-                    "resize", 
-                    closure.as_ref().unchecked_ref()
-                );
-                
-                // Forget the closure so it doesn't get dropped
-                closure.forget();
-                
-                // Initial trigger
-                handler();
-            }
-            
-            // No cleanup needed since we forgot the closure
-        });
-    }
-
-    // Use a hook to update coordinates whenever the component renders
-    use_effect(move || {
-        spawn(async move {
-            let mut result = HashMap::new();
-            
-            // Use browser APIs to get elements by ID
-            if let Some(window) = web_sys::window() {
-                if let Some(document) = window.document() {
-                    // Process each box by ID
-                    for box_id in &["a", "b"] {
-                        let element_id = format!("box-{}", box_id);
-                        
-                        // Get element by ID
-                        if let Some(element) = document.get_element_by_id(&element_id) {
-                            // Get bounding rect
-                            let rect = element.get_bounding_client_rect();
-                            
-                            tracing::info!(
-                                "DOM element {}: x={}, y={}, w={}, h={}", 
-                                box_id, rect.x(), rect.y(), rect.width(), rect.height()
-                            );
-                            
-                            result.insert(
-                                BoxId(if *box_id == "a" { "a" } else { "b" }),
-                                Rect {
-                                    x: rect.x(),
-                                    y: rect.y(),
-                                    width: rect.width(),
-                                    height: rect.height(),
-                                },
-                            );
-                        }
-                    }
-                }
-            }
-            
-            // Update coordinates when all are collected
-            if !result.is_empty() {
-                coords.set(result);
-            }
-        });
+    let node_1 = Node {
+        id: "1".to_string(),
+        value: "Node 1".to_string(),
+    };
+    let node_2 = Node {
+        id: "2".to_string(),
+        value: "Node 2".to_string(),
+    };
+    let data = use_signal(|| Data {
+        nodes: vec![node_1.clone(), node_2.clone()],
+        edges: vec![Edge {
+            id: "e1".to_string(),
+            source: node_1,
+            target: node_2,
+        }],
     });
-
-    // Create the boxes with their respective positions
-    let boxes = box_ids.iter().enumerate().map(|(i, id)| {
-        let mut node_ref = refs.get(id).unwrap().clone();
-        let positions = [
-            "left-1/4 top-1/3",  // Box A
-            "left-2/3 top-2/3",  // Box B
-        ];
-        
-        // Simpler onmounted handler
-        let mut update_trigger = update_trigger.clone();
-        
-        rsx! {
-            div {
-                key: "{id.0}",
-                id: "box-{id.0}",
-                class: "absolute w-32 h-16 bg-blue-100 border-2 border-blue-500 flex items-center justify-center text-xl font-bold select-none {positions[i]}",
-                onmounted: move |element| {
-                    node_ref.set(Some(element));
-                    // Trigger an update when mounted
-                    update_trigger.with_mut(|count| *count += 1);
-                },
-                "{id.0}"
-            }
-        }
-    });
-
-    // Create arrow points using perfect_arrows
-let arrow_path = {
-    // Get the coordinates using the original percentage-based approach
-    // Box dimensions as percentage of viewport
-    let box_width_pct = 8.0;  // w-32 is roughly 8% of viewport
-    let box_height_pct = 4.0;  // h-16 is roughly 4% of viewport
-    
-    // Box A center (25% + half-width, 33% + half-height)
-    let x1_pct = 25.0 + (box_width_pct / 2.0);
-    let y1_pct = 33.0 + (box_height_pct / 2.0);
-    
-    // Box B center (66% + half-width, 66% + half-height)
-    let x2_pct = 66.0 + (box_width_pct / 2.0);
-    let y2_pct = 66.0 + (box_height_pct / 2.0);
-    
-    // Convert percentages to actual pixel values (for a 100x100 viewBox)
-    let start = perfect_arrows::Pos2 {
-        x: x1_pct as f32,
-        y: y1_pct as f32,
-    };
-    
-    let end = perfect_arrows::Pos2 {
-        x: x2_pct as f32,
-        y: y2_pct as f32,
-    };
-    
-    // Box sizes in viewBox coordinates
-    let box_size = perfect_arrows::Vec2 {
-        x: box_width_pct as f32,
-        y: box_height_pct as f32,
-    };
-    
-    // Create arrow options
-    let options = ArrowOptions {
-        bow: 0.2,          // Moderate curve
-        stretch: 0.5,      // Moderate stretch
-        pad_start: 0.0,    // No padding at start
-        pad_end: 0.0,      // No padding at end
-        straights: false,  // Force curved arrows
-        ..ArrowOptions::default()
-    };
-    
-    // Get arrow points and angles
-    let (start_point, control_point, end_point, angle_end, _, _) = 
-        get_box_to_box_arrow(start, box_size.clone(), end, box_size.clone(), options);
-    
-    // Create SVG path for curved arrow
-    let path_d = format!(
-        "M {},{} Q {},{} {},{}",
-        start_point.x, start_point.y,
-        control_point.x, control_point.y,
-        end_point.x, end_point.y
-    );
-    
-    // Create arrowhead points based on end angle
-    let arrow_size = 2.0; // Size of the arrowhead in viewBox coordinates
-    let arrow_angle = angle_end as f64;
-    
-    let arrow_x = end_point.x as f64;
-    let arrow_y = end_point.y as f64;
-    
-    // Calculate arrowhead points
-    let angle1 = arrow_angle - 0.5; // Left side of arrowhead
-    let angle2 = arrow_angle + 0.5; // Right side of arrowhead
-    
-    let x1 = arrow_x - arrow_size * angle1.cos();
-    let y1 = arrow_y - arrow_size * angle1.sin();
-    let x2 = arrow_x - arrow_size * angle2.cos();
-    let y2 = arrow_y - arrow_size * angle2.sin();
-    
-    (path_d, arrow_x, arrow_y, x1, y1, x2, y2)
-};
-
-    // Render curved path
-    let (path_d, arrow_x, arrow_y, x1, y1, x2, y2) = arrow_path;
     // Main render
     rsx! {
         // Add stylesheets
         document::Link { rel: "stylesheet", href: TAILWIND_CSS }
         document::Link { rel: "icon", href: FAVICON }
-        
+
         // Main container
-        div { 
+        div {
             class: "relative w-screen h-screen bg-slate-100",
-            
+
             // Title
             div {
                 class: "absolute top-4 left-4 text-xl font-bold",
                 "Connected Boxes Example"
             }
-            
+
             // Instructions
             div {
                 class: "absolute top-10 left-4 text-sm text-slate-600",
                 "Boxes connected with curved perfect arrows"
             }
-            
-            // Render all boxes
-            {boxes}
-            
-            // Render the curved arrow with perfect_arrows
-            svg {
-    class: "fixed top-0 left-0 pointer-events-none z-10",
-    style: "width: 100vw; height: 100vh; overflow: visible;",
-    view_box: "0 0 100 100",
-    preserve_aspect_ratio: "none",
-    
-    path {
-        d: "{path_d}",
-        fill: "none",
-        stroke: "red",
-        stroke_width: "0.5"
+
+            // Canvas component
+            Canvas { data }
+
+        }
     }
-    // Render arrowhead
-    polygon {
-        points: "{arrow_x},{arrow_y} {x1},{y1} {x2},{y2}",
-        fill: "red"
+}
+
+/// Canvas component with "data-canvas": "true", data attribute
+#[component]
+fn Canvas(data: Signal<Data>) -> Element {
+    rsx! {
+        div {
+            class: "relative h-full inset-0 border-4 border-orange-300",
+            "data-canvas": "true",
+            AllNodes { nodes: data.read().nodes.clone() }
+            AllEdgesWithMounted { edges: data.read().edges.clone() }
+        }
     }
-}        }
+}
+
+// Updated AllNodes component - add data attributes for easier selection
+#[component]
+fn AllNodes(nodes: Vec<Node>) -> Element {
+    rsx! {
+        // Render all nodes
+        {nodes.iter().map(|node| {
+            rsx! {
+                div {
+                    id: "{node.id}",
+                    class: "absolute bg-white border border-gray-300 rounded p-2",
+                    style: format!("left: 100px; top: {}px;", node.id.parse::<i32>().unwrap() * 150 + 100),
+                    "data-node-id": "{node.id}",  // Add this for easier selection
+                    "{node.value}"
+                }
+            }
+        })}
+    }
+}
+
+#[component]
+fn AllEdgesWithMounted(edges: Vec<Edge>) -> Element {
+    let mut arrow_paths = use_signal(|| HashMap::<String, EdgeSvgData>::new());
+
+    // This will be called after the component is mounted to the DOM
+    let on_mounted = move |_| {
+        let edges_clone = edges.clone();
+        spawn(async move {
+            // Small delay to ensure all sibling elements are rendered
+            gloo_timers::future::TimeoutFuture::new(50).await;
+
+            let mut new_paths = HashMap::new();
+            for edge in edges_clone.iter() {
+                if let Ok(svg_data) = generate_arrow_path_safe(edge) {
+                    new_paths.insert(edge.id.clone(), svg_data);
+                }
+            }
+            arrow_paths.set(new_paths);
+        });
+    };
+
+    rsx! {
+        svg {
+            class: "absolute top-0 left-0 float-left w-full h-full pointer-events-auto overflow-visible",
+            onmounted: on_mounted,
+            {arrow_paths.read().iter().map(|(edge_id, svg_data)| {
+                rsx! {
+                    g {
+                        key: "{edge_id}",
+                        path {
+                            d: "{svg_data.path}",
+                            fill: "none",
+                            stroke: "black",
+                            "stroke-width": "2"
+                        }
+                        polygon {
+                            points: "-6,-3 0,0 -6,3",
+                            fill: "black",
+                            transform: "{svg_data.arrow_transform}"
+                        }
+                    }
+                }
+            })}
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+struct EdgeSvgData {
+    path: String,
+    arrow_transform: String,
+}
+
+fn generate_arrow_path_safe(edge: &Edge) -> Result<EdgeSvgData, String> {
+    let window = web_sys::window().ok_or("No window")?;
+    let document = window.document().ok_or("No document")?;
+
+    // Much simpler and faster - direct ID lookup
+    let source_el = document
+        .get_element_by_id(&edge.source.id)
+        .ok_or("Source element not found")?;
+
+    let target_el = document
+        .get_element_by_id(&edge.target.id)
+        .ok_or("Target element not found")?;
+
+    let canvas_el = source_el
+        .closest("[data-canvas]")
+        .map_err(|_| "Canvas query failed")?
+        .ok_or("Canvas element not found")?;
+
+    // Get coordinates
+    let source = get_coords(&source_el);
+    let target = get_coords(&target_el);
+    let canvas = get_coords(&canvas_el);
+
+    let x_0 = source.left - canvas.left;
+    let y_0 = source.top - canvas.top;
+    let x_1 = target.left - canvas.left;
+    let y_1 = target.top - canvas.top;
+
+    let w_0 = source.right - source.left;
+    let h_0 = source.bottom - source.top;
+    let w_1 = target.right - target.left;
+    let h_1 = target.bottom - target.top;
+
+    let start = Pos2 {
+        x: x_0 + w_0 / 2.0,
+        y: y_0 + h_0 / 2.0,
+    };
+
+    let start_size = Vec2 { x: w_0, y: h_0 };
+
+    let end = Pos2 {
+        x: x_1 + w_1 / 2.0,
+        y: y_1 + h_1 / 2.0,
+    };
+
+    let end_size = Vec2 { x: w_1, y: h_1 };
+
+    let options = ArrowOptions::default();
+
+    let (
+        Pos2 { x: sx, y: sy },
+        Pos2 { x: cx, y: cy },
+        Pos2 { x: ex, y: ey },
+        angle_end,
+        _angle_start,
+        _angle_center,
+    ) = get_box_to_box_arrow(start, start_size, end, end_size, options);
+
+    let path = format!(
+        "M{sx},{sy} Q{cx},{cy} {ex},{ey}",
+        sx = sx,
+        sy = sy,
+        cx = cx,
+        cy = cy,
+        ex = ex,
+        ey = ey
+    );
+
+    let end_angle_as_degrees = angle_end * (180.0 / PI);
+    let arrow_transform = format!("translate({}, {}) rotate({})", ex, ey, end_angle_as_degrees);
+
+    Ok(EdgeSvgData {
+        path,
+        arrow_transform,
+    })
+}
+
+fn get_coords(el: &web_sys::Element) -> Rect {
+    let rect = el.get_bounding_client_rect();
+    Rect {
+        top: rect.top() + web_sys::window().unwrap().page_y_offset().unwrap_or(0.0),
+        right: rect.right() + web_sys::window().unwrap().page_x_offset().unwrap_or(0.0),
+        bottom: rect.bottom() + web_sys::window().unwrap().page_y_offset().unwrap_or(0.0),
+        left: rect.left() + web_sys::window().unwrap().page_x_offset().unwrap_or(0.0),
     }
 }

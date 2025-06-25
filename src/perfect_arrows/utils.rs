@@ -1,18 +1,18 @@
 //! Utilities for the perfect arrows crate.
-use std::f32::consts::PI;
+use std::f64::consts::PI;
 
 #[repr(C)]
 #[derive(serde::Deserialize, serde::Serialize, Clone, Debug)]
 pub struct Vec2 {
-    pub x: f32,
-    pub y: f32,
+    pub x: f64,
+    pub y: f64,
 }
 
 #[repr(C)]
 #[derive(serde::Deserialize, serde::Serialize, Clone, Debug)]
 pub struct Pos2 {
-    pub x: f32,
-    pub y: f32,
+    pub x: f64,
+    pub y: f64,
 }
 
 ///  Modulate a value between two ranges.
@@ -21,7 +21,7 @@ pub struct Pos2 {
 /// @param rangeB to [low, high]
 /// @param clamp
 /// @returns The modulated value.
-pub fn modulate(value: f32, range_a: (f32, f32), range_b: (f32, f32), clamp: bool) -> f32 {
+pub fn modulate(value: f64, range_a: (f64, f64), range_b: (f64, f64), clamp: bool) -> f64 {
     let (from_low, from_high) = range_a;
     let (to_low, to_high) = range_b;
     let result = to_low + ((value - from_low) / (from_high - from_low)) * (to_high - to_low);
@@ -50,7 +50,7 @@ pub fn modulate(value: f32, range_a: (f32, f32), range_b: (f32, f32), clamp: boo
 /// * @param center The x, y coordinate of the point to rotate round.
 /// * @param angle The distance (in radians) to rotate.
 ///
-pub fn rotate_point(point: &Pos2, center: &Pos2, angle: f32) -> Pos2 {
+pub fn rotate_point(point: &Pos2, center: &Pos2, angle: f64) -> Pos2 {
     let s = angle.sin();
     let c = angle.cos();
 
@@ -70,7 +70,7 @@ pub fn rotate_point(point: &Pos2, center: &Pos2, angle: f32) -> Pos2 {
 /// * @param pos0 The x, y coordinate of the first point.
 /// * @param pos1 The x, y coordinate of the second point.
 /// @returns The distance between the two points.
-pub fn get_distance(pos0: &Pos2, pos1: &Pos2) -> f32 {
+pub fn get_distance(pos0: &Pos2, pos1: &Pos2) -> f64 {
     ((pos1.y - pos0.y).powi(2) + (pos1.x - pos0.x).powi(2)).sqrt()
 }
 
@@ -78,7 +78,7 @@ pub fn get_distance(pos0: &Pos2, pos1: &Pos2) -> f32 {
 /// * @param pos0 The x, y coordinate of the first point.
 /// * @param pos1 The x, y coordinate of the second point.
 /// @returns The angle between the two points.
-pub fn get_angle(pos0: &Pos2, pos1: &Pos2) -> f32 {
+pub fn get_angle(pos0: &Pos2, pos1: &Pos2) -> f64 {
     (pos1.y - pos0.y).atan2(pos1.x - pos0.x)
 }
 
@@ -87,7 +87,7 @@ pub fn get_angle(pos0: &Pos2, pos1: &Pos2) -> f32 {
 /// * @param a The angle in radians.
 /// * @param d The distance to move.
 /// @returns The new point.
-pub fn project_point(pos0: Pos2, a: f32, d: f32) -> Pos2 {
+pub fn project_point(pos0: Pos2, a: f64, d: f64) -> Pos2 {
     Pos2 {
         x: pos0.x + a.cos() * d,
         y: pos0.y + a.sin() * d,
@@ -99,7 +99,7 @@ pub fn project_point(pos0: Pos2, a: f32, d: f32) -> Pos2 {
 /// * @param pos1 The x, y coordinate of the second point.
 /// * @param d The normalized distance between the two points.
 /// @returns The point between the two points.
-pub fn get_point_between(pos0: &Pos2, pos1: &Pos2, d: f32) -> Pos2 {
+pub fn get_point_between(pos0: &Pos2, pos1: &Pos2, d: f64) -> Pos2 {
     Pos2 {
         x: pos0.x + (pos1.x - pos0.x) * d,
         y: pos0.y + (pos1.y - pos0.y) * d,
@@ -110,15 +110,15 @@ pub fn get_point_between(pos0: &Pos2, pos1: &Pos2, d: f32) -> Pos2 {
 /// * @param a The angle to check.
 /// * @param s The number of sectors to check.
 /// @returns The sector of the angle.
-pub fn get_sector(a: f32, s: i32) -> i32 {
-    (s as f32 * (0.5 + ((a / (PI * 2.0)) % s as f32))).floor() as i32
+pub fn get_sector(a: f64, s: i32) -> i32 {
+    (s as f64 * (0.5 + ((a / (PI * 2.0)) % s as f64))).floor() as i32
 }
 
 /// Get a normal value representing how close two points are from being at a 45 degree angle.
 /// * @param pos0 The x, y coordinate of the first point.
 /// * @param pos1 The x, y coordinate of the second point.
 /// @returns The angliness value.
-pub fn get_angliness(pos0: Pos2, pos1: Pos2) -> f32 {
+pub fn get_angliness(pos0: Pos2, pos1: Pos2) -> f64 {
     ((pos1.x - pos0.x) / (pos1.y - pos0.y)).abs()
 }
 
@@ -133,14 +133,14 @@ pub fn get_angliness(pos0: Pos2, pos1: Pos2) -> f32 {
 /// * @param h1 The height of the second rectangle.
 /// @returns Whether the rectangles collide.
 pub(crate) fn do_rectangles_collide(
-    x0: f32,
-    y0: f32,
-    w0: f32,
-    h0: f32,
-    x1: f32,
-    y1: f32,
-    w1: f32,
-    h1: f32,
+    x0: f64,
+    y0: f64,
+    w0: f64,
+    h0: f64,
+    x1: f64,
+    y1: f64,
+    w1: f64,
+    h1: f64,
 ) -> bool {
     !(x0 >= x1 + w1 || x1 >= x0 + w0 || y0 >= y1 + h1 || y1 >= y0 + h0)
 }
@@ -156,16 +156,16 @@ pub(crate) fn do_rectangles_collide(
 /// * @param h The height of the rectangle.
 /// @returns The intersection points.
 pub fn get_segment_rectangle_intersection_points(
-    x0: f32,
-    y0: f32,
-    x1: f32,
-    y1: f32,
-    x: f32,
-    y: f32,
-    w: f32,
-    h: f32,
-) -> Vec<[f32; 2]> {
-    let mut points: Vec<[f32; 2]> = vec![];
+    x0: f64,
+    y0: f64,
+    x1: f64,
+    y1: f64,
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+) -> Vec<[f64; 2]> {
+    let mut points: Vec<[f64; 2]> = vec![];
 
     for [px0, py0, px1, py1] in [
         [x, y, x + w, y],
@@ -194,15 +194,15 @@ pub fn get_segment_rectangle_intersection_points(
 /// * @param y3 The y-axis coordinate of the second segment's ending point.
 /// @returns The intersection point.
 pub fn get_segment_segment_intersection(
-    x0: f32,
-    y0: f32,
-    x1: f32,
-    y1: f32,
-    x2: f32,
-    y2: f32,
-    x3: f32,
-    y3: f32,
-) -> Option<[f32; 2]> {
+    x0: f64,
+    y0: f64,
+    x1: f64,
+    y1: f64,
+    x2: f64,
+    y2: f64,
+    x3: f64,
+    y3: f64,
+) -> Option<[f64; 2]> {
     let denom = (y3 - y2) * (x1 - x0) - (x3 - x2) * (y1 - y0);
     let nume_a = (x3 - x2) * (y0 - y2) - (y3 - y2) * (x0 - x2);
     let nume_b = (x1 - x0) * (y0 - y2) - (y1 - y0) * (x0 - x2);
@@ -234,14 +234,14 @@ pub fn get_segment_segment_intersection(
 /// * @param y1 The delta-y of the ray.
 /// @returns The intersection points.
 pub fn get_segment_circle_intersections(
-    cx: f32,
-    cy: f32,
-    r: f32,
-    x0: f32,
-    y0: f32,
-    x1: f32,
-    y1: f32,
-) -> Option<Vec<[f32; 2]>> {
+    cx: f64,
+    cy: f64,
+    r: f64,
+    x0: f64,
+    y0: f64,
+    x1: f64,
+    y1: f64,
+) -> Option<Vec<[f64; 2]>> {
     let v1 = [x1 - x0, y1 - y0];
     let v2 = [x0 - cx, y0 - cy];
 
@@ -278,7 +278,7 @@ pub fn get_segment_circle_intersections(
 /// Normalize an angle (in radians)
 /// * @param radians The radians quantity to normalize.
 /// @returns The normalized angle.
-pub fn normalize_angle(radians: f32) -> f32 {
+pub fn normalize_angle(radians: f64) -> f64 {
     radians - PI * 2.0 * (radians / (PI * 2.0)).floor()
 }
 
@@ -293,14 +293,14 @@ pub fn normalize_angle(radians: f32) -> f32 {
 /// * @param y1 The y-axis coordinate of the segment's end point.
 /// @returns The intersection point.
 pub fn get_ray_segment_intersection(
-    x: f32,
-    y: f32,
-    dx: f32,
-    dy: f32,
-    x0: f32,
-    y0: f32,
-    x1: f32,
-    y1: f32,
+    x: f64,
+    y: f64,
+    dx: f64,
+    dy: f64,
+    x0: f64,
+    y0: f64,
+    x1: f64,
+    y1: f64,
 ) -> Option<Pos2> {
     let d = dx * (y1 - y0) - dy * (x1 - x0);
 
@@ -322,14 +322,14 @@ pub fn get_ray_segment_intersection(
 /// Get the normalized delta (x and y) for an angle.
 /// * @param angle The angle in radians
 /// @returns The delta.
-pub fn get_delta(angle: f32) -> (f32, f32) {
+pub fn get_delta(angle: f64) -> (f64, f64) {
     (angle.cos(), angle.sin())
 }
 
 /// Get a normal value representing how close two points are from being at a 45 degree angle.
 /// * @param angle The angle in radians
 /// @returns The intermediate value.
-pub fn get_intermediate(angle: f32) -> f32 {
+pub fn get_intermediate(angle: f64) -> f64 {
     let pi_over_4 = PI / 4.0;
     let inner = (angle % (PI / 2.0)).abs() - PI / 4.0;
     inner.abs() / pi_over_4
@@ -348,16 +348,16 @@ pub fn get_intermediate(angle: f32) -> f32 {
 /// * @param r1
 /// @returns The line.
 pub fn get_line_between_rounded_rectangles(
-    x0: f32,
-    y0: f32,
-    w0: f32,
-    h0: f32,
-    r0: f32,
-    x1: f32,
-    y1: f32,
-    w1: f32,
-    h1: f32,
-    r1: f32,
+    x0: f64,
+    y0: f64,
+    w0: f64,
+    h0: f64,
+    r0: f64,
+    x1: f64,
+    y1: f64,
+    w1: f64,
+    h1: f64,
+    r1: f64,
 ) -> (Pos2, Pos2) {
     let cx0 = x0 + w0 / 2.0;
     let cy0 = y0 + h0 / 2.0;
@@ -387,15 +387,15 @@ pub fn get_line_between_rounded_rectangles(
 /// * @param r The corner radius of the rectangle.
 /// @returns The intersection points.
 pub fn get_ray_rounded_rectangle_intersection(
-    ox: f32,
-    oy: f32,
-    dx: f32,
-    dy: f32,
-    x: f32,
-    y: f32,
-    w: f32,
-    h: f32,
-    r: f32,
+    ox: f64,
+    oy: f64,
+    dx: f64,
+    dy: f64,
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+    r: f64,
 ) -> Vec<Pos2> {
     let mx = x + w;
     let my = y + h;
@@ -458,15 +458,15 @@ pub fn get_ray_rounded_rectangle_intersection(
 /// * @param dy
 /// @returns The intersection points.
 pub fn get_rectangle_segment_intersected_by_ray(
-    x: f32,
-    y: f32,
-    w: f32,
-    h: f32,
-    ox: f32,
-    oy: f32,
-    dx: f32,
-    dy: f32,
-) -> Vec<[f32; 4]> {
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+    ox: f64,
+    oy: f64,
+    dx: f64,
+    dy: f64,
+) -> Vec<[f64; 4]> {
     get_rectangle_segments(x, y, w, h)
         .into_iter()
         .filter(|[sx0, sy0, sx1, sy1]| {
@@ -481,7 +481,7 @@ pub fn get_rectangle_segment_intersected_by_ray(
 /// * @param w
 /// * @param h
 /// @returns The segments.
-pub fn get_rectangle_segments(x: f32, y: f32, w: f32, h: f32) -> Vec<[f32; 4]> {
+pub fn get_rectangle_segments(x: f64, y: f64, w: f64, h: f64) -> Vec<[f64; 4]> {
     vec![
         [x, y, x + w, y],
         [x + w, y, x + w, y + h],
@@ -500,13 +500,13 @@ pub fn get_rectangle_segments(x: f32, y: f32, w: f32, h: f32) -> Vec<[f32; 4]> {
 /// * @param dy The delta-y of the angle.
 /// @returns The intersection points.
 pub fn get_ray_circle_intersections(
-    cx: f32,
-    cy: f32,
-    r: f32,
-    ox: f32,
-    oy: f32,
-    dx: f32,
-    dy: f32,
+    cx: f64,
+    cy: f64,
+    r: f64,
+    ox: f64,
+    oy: f64,
+    dx: f64,
+    dy: f64,
 ) -> Option<Vec<Pos2>> {
     let a = dx * dx + dy * dy;
     let b = 2.0 * dx * (ox - cx) + 2.0 * dy * (oy - cy);
@@ -517,7 +517,7 @@ pub fn get_ray_circle_intersections(
         return None;
     }
 
-    let mut t_values: Vec<f32> = vec![];
+    let mut t_values: Vec<f64> = vec![];
 
     if d == 0.0 {
         t_values.push(-b / 2.0 / a);

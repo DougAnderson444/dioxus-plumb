@@ -2,21 +2,21 @@ mod utils;
 use utils::*;
 pub use utils::{Pos2, Vec2};
 
-use std::f32::consts::PI;
+use std::f64::consts::PI;
 
-const PI2: f32 = PI * 2.0;
-const MIN_ANGLE: f32 = PI / 24.0;
+const PI2: f64 = PI * 2.0;
+const MIN_ANGLE: f64 = PI / 24.0;
 
 /// Arrow Options
 #[derive(serde::Deserialize, serde::Serialize, Clone, Debug)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct ArrowOptions {
-    pub bow: f32,
-    pub stretch: f32,
-    pub stretch_min: f32,
-    pub stretch_max: f32,
-    pub pad_start: f32,
-    pub pad_end: f32,
+    pub bow: f64,
+    pub stretch: f64,
+    pub stretch_min: f64,
+    pub stretch_max: f64,
+    pub pad_start: f64,
+    pub pad_end: f64,
     pub flip: bool,
     pub straights: bool,
 }
@@ -38,7 +38,7 @@ impl Default for ArrowOptions {
             stretch_min: 50.0,
             stretch_max: 420.0,
             pad_start: 0.0,
-            pad_end: 4.0,
+            pad_end: 0.0,
             flip: false,
             straights: true,
         }
@@ -50,7 +50,7 @@ pub fn get_box_to_box_arrow(
     end: Pos2,
     end_size: Vec2,
     options: ArrowOptions,
-) -> (Pos2, Pos2, Pos2, f32, f32, f32) {
+) -> (Pos2, Pos2, Pos2, f64, f64, f64) {
     let ArrowOptions {
         bow,
         stretch,
@@ -141,16 +141,16 @@ pub fn get_box_to_box_arrow(
             };
 
     let final_angle0 = if overlap_effect >= 0.5 {
-        angle_center + PI * rot as f32
+        angle_center + PI * rot as f64
     } else {
-        angle_center + f32::max(MIN_ANGLE, combined_offset) * rot as f32
+        angle_center + f64::max(MIN_ANGLE, combined_offset) * rot as f64
     };
 
     let (dx0, dy0) = get_delta(
         final_angle0
             .rem_euclid(PI2)
             .to_string()
-            .parse::<f32>()
+            .parse::<f64>()
             .unwrap(),
     );
     let ts =
@@ -165,7 +165,7 @@ pub fn get_box_to_box_arrow(
         &ts[0],
         &smp,
         if is_colliding {
-            f32::max(overlap_effect, 0.15)
+            f64::max(overlap_effect, 0.15)
         } else {
             0.15
         },
@@ -175,9 +175,9 @@ pub fn get_box_to_box_arrow(
 
     if is_colliding {
         arc = if arc < 0.0 {
-            f32::min(arc, -0.5)
+            f64::min(arc, -0.5)
         } else {
-            f32::max(arc, 0.5)
+            f64::max(arc, 0.5)
         };
     }
 
@@ -200,16 +200,16 @@ pub fn get_box_to_box_arrow(
             + (card_effect1 + overlap_effect1)
             + (dist_offset + angle_offset) / 2.0;
         let final_angle1 = if overlap_effect >= 0.5 {
-            angle_center + PI * rot as f32
+            angle_center + PI * rot as f64
         } else {
-            angle_center + PI - f32::max(combined_offset, MIN_ANGLE) * rot as f32
+            angle_center + PI - f64::max(combined_offset, MIN_ANGLE) * rot as f64
         };
 
         let (dx1, dy1) = get_delta(
             final_angle1
                 .rem_euclid(PI2)
                 .to_string()
-                .parse::<f32>()
+                .parse::<f64>()
                 .unwrap(),
         );
         let te = &get_ray_rounded_rectangle_intersection(
@@ -229,8 +229,8 @@ pub fn get_box_to_box_arrow(
 
     let m1 = get_point_between(&start, &end, 0.5);
     let ti = get_point_between(&start, &end, (0.5 + arc).clamp(-1.0, 1.0));
-    let ci_a = rotate_point(&ti, &m1, (PI / 2.0) * rot as f32);
-    let ci_b = rotate_point(&ti, &m1, (PI / 2.0) * -rot as f32);
+    let ci_a = rotate_point(&ti, &m1, (PI / 2.0) * rot as f64);
+    let ci_b = rotate_point(&ti, &m1, (PI / 2.0) * -rot as f64);
 
     let control = if is_colliding
         && get_distance(&ci_a, &Pos2 { x: cx1, y: cy1 })
