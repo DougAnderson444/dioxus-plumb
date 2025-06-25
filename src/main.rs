@@ -1,7 +1,7 @@
 mod perfect_arrows;
 
+use dioxus::logger::tracing;
 use dioxus::prelude::*;
-use dioxus::{html::tr, logger::tracing};
 use dot_parser::{
     ast,
     canonical::{self},
@@ -14,18 +14,7 @@ const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
 
 type Att = (&'static str, &'static str);
 
-#[derive(Clone, Debug, PartialEq)]
-struct Data {
-    nodes: Vec<Node>,
-    edges: Vec<Edge>,
-}
-
-#[derive(Clone, Debug, PartialEq, Hash, Eq)]
-struct Node {
-    id: String,
-    value: String,
-}
-
+/// Newtype for the EdgeStmt since they
 #[derive(Clone, Debug, PartialEq)]
 struct Edge {
     id: String,
