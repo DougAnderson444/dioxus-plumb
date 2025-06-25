@@ -1,5 +1,5 @@
 [package]
-name = "dioxus-components"
+name = "dioxus-plumb"
 version = "0.1.0"
 authors = ["Doug Anderson444 <douganderson444@gmail.com>"]
 edition = "2021"
@@ -13,6 +13,9 @@ web-sys = { version = "0.3.77", features = [
   "Element",
   "Window",
   "DomRect",
+  "EventTarget",
+  "MutationObserver",
+  "MutationObserverInit",
 ] }
 wasm-bindgen = "0.2.100"
 serde = { version = "1", features = ["derive"] }

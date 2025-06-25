@@ -45,6 +45,7 @@ fn main() {
 #[component]
 pub fn App() -> Element {
     let initial_dot = r#"digraph G {
+        label="Rust Dioxus Graph";  // Name for the whole graph
         subgraph cluster_0 {
             label="Process A";
             style="dashed";

@@ -807,18 +807,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dioxus-components"
-version = "0.1.0"
-dependencies = [
- "dioxus",
- "dot-parser",
- "gloo-timers",
- "serde",
- "wasm-bindgen",
- "web-sys",
-]
-
-[[package]]
 name = "dioxus-config-macro"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1119,6 +1107,18 @@ dependencies = [
  "jni",
  "libc",
  "once_cell",
+]
+
+[[package]]
+name = "dioxus-plumb"
+version = "0.1.0"
+dependencies = [
+ "dioxus",
+ "dot-parser",
+ "gloo-timers",
+ "serde",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]
