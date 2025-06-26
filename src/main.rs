@@ -12,14 +12,14 @@ use wasm_bindgen::{prelude::*, JsCast};
 const FAVICON: Asset = asset!("/assets/favicon.ico");
 const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
 
-type Att = (&'static str, &'static str);
+type Att<'a> = (&'a str, &'a str);
 
 /// Owned representation of the graph data
 /// So we don't have to deal with the AST lifetimes directly in the components
 #[derive(Clone, Debug, PartialEq)]
 pub struct GraphData {
     pub nodes: Vec<NodeData>,
-    pub edges: Vec<Edge>,
+    pub edges: Vec<EdgeData>,
     pub label: Option<String>,
     pub subgraphs: Vec<SubgraphData>,
 }
@@ -33,7 +33,7 @@ pub struct NodeData {
 
 /// Owned Edge data
 #[derive(Clone, Debug, PartialEq)]
-pub struct Edge {
+pub struct EdgeData {
     pub id: String,
     pub source: String,
     pub target: String,
@@ -84,7 +84,7 @@ impl GraphData {
             .edges
             .set
             .iter()
-            .map(|edge| Edge {
+            .map(|edge| EdgeData {
                 id: format!("{}-{}", edge.from, edge.to),
                 source: edge.from.clone(),
                 target: edge.to.clone(),
@@ -256,24 +256,19 @@ pub fn App() -> Element {
         
         3 -> 4 [label="continue"];
         3 -> 5 [label="bypass"];
-    }"#;
+    }"#
+    .to_string();
+
+    // Create graph data from AST
+    let graph_data = GraphData::from_ast(&ast::Graph::<Att>::try_from(dot.as_str()).unwrap());
 
     rsx! {
-        Graph { dot }
+        Graph { graph_data }
     }
 }
 
 #[component]
-pub fn Graph(dot: &'static str) -> Element {
-    let ast = use_signal(|| {
-        ast::Graph::try_from(dot).unwrap_or_else(|_| {
-            // Fallback to empty graph on parse error
-            ast::Graph::try_from("digraph G { }").unwrap()
-        })
-    });
-
-    let graph_data = use_memo(move || GraphData::from_ast(&ast.read()));
-
+pub fn Graph(graph_data: GraphData) -> Element {
     // Main render
     rsx! {
         // Add stylesheets
@@ -312,25 +307,24 @@ pub fn Graph(dot: &'static str) -> Element {
 }
 
 #[component]
-fn Canvas(graph_data: Memo<GraphData>) -> Element {
+fn Canvas(graph_data: GraphData) -> Element {
     rsx! {
         div {
             class: "relative w-full h-full overflow-auto p-8 flex flex-col items-center justify-center",
             "data-canvas": "true",
             div {
                 class: "bg-white rounded-xl shadow-lg p-6 min-w-[500px] flex flex-wrap items-start justify-center",
-                GraphLabelComponent { graph_data}
-                GraphContentComponent { graph_data}
-                AllEdgesWithMounted { edges: graph_data.read().edges.clone() }
+                GraphLabelComponent { graph_data: graph_data.clone() }
+                GraphContentComponent { graph_data: graph_data.clone() }
+                AllEdgesWithMounted { edges: graph_data.edges.clone() }
             }
         }
     }
 }
 
 #[component]
-fn GraphLabelComponent(graph_data: Memo<GraphData>) -> Element {
+fn GraphLabelComponent(graph_data: GraphData) -> Element {
     let graph_label = graph_data
-        .read()
         .label
         .clone()
         .unwrap_or_else(|| "Graph".to_string());
@@ -344,8 +338,8 @@ fn GraphLabelComponent(graph_data: Memo<GraphData>) -> Element {
 }
 
 #[component]
-fn GraphContentComponent(graph_data: Memo<GraphData>) -> Element {
-    let data = graph_data.read();
+fn GraphContentComponent(graph_data: GraphData) -> Element {
+    let data = graph_data;
 
     // Get standalone nodes (not in any subgraph)
     let nodes_in_subgraphs: HashSet<_> = data
@@ -420,7 +414,7 @@ fn GraphContentComponent(graph_data: Memo<GraphData>) -> Element {
 }
 
 #[component]
-fn AllEdgesWithMounted(edges: Vec<Edge>) -> Element {
+fn AllEdgesWithMounted(edges: Vec<EdgeData>) -> Element {
     let mut arrow_paths = use_signal(HashMap::<String, EdgeSvgData>::new);
     let edges_ref = use_signal(|| edges.clone());
     let mut initial_load = use_signal(|| true);
@@ -547,7 +541,7 @@ struct EdgeSvgData {
     label_y: f64,
 }
 
-fn generate_arrow_path_safe(edge: &Edge) -> Result<EdgeSvgData, String> {
+fn generate_arrow_path_safe(edge: &EdgeData) -> Result<EdgeSvgData, String> {
     let window = web_sys::window().ok_or("No window")?;
     let document = window.document().ok_or("No document")?;
 
