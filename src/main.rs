@@ -1,13 +1,12 @@
 mod perfect_arrows;
 
-use dioxus::logger::tracing;
 use dioxus::prelude::*;
 use dot_parser::{
     ast,
     canonical::{self},
 };
 use perfect_arrows::{get_box_to_box_arrow, ArrowOptions, Pos2, Vec2};
-use std::{collections::HashMap, f64::consts::PI};
+use std::{collections::HashMap, collections::HashSet, f64::consts::PI};
 use wasm_bindgen::{prelude::*, JsCast};
 
 const FAVICON: Asset = asset!("/assets/favicon.ico");
@@ -15,11 +14,30 @@ const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
 
 type Att = (&'static str, &'static str);
 
+/// Owned representation of the graph data
+/// So we don't have to deal with the AST lifetimes directly in the components
 #[derive(Clone, Debug, PartialEq)]
-struct Edge {
-    id: String,
-    source: String,
-    target: String,
+pub struct GraphData {
+    pub nodes: Vec<NodeData>,
+    pub edges: Vec<Edge>,
+    pub label: Option<String>,
+    pub subgraphs: Vec<SubgraphData>,
+}
+
+/// Owned representation of the node data
+#[derive(Clone, Debug, PartialEq)]
+pub struct NodeData {
+    pub id: String,
+    pub label: Option<String>,
+}
+
+/// Owned Edge data
+#[derive(Clone, Debug, PartialEq)]
+pub struct Edge {
+    pub id: String,
+    pub source: String,
+    pub target: String,
+    pub label: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -32,11 +50,184 @@ struct Rect {
 
 /// Struct for subgraphs
 #[derive(Clone, Debug, PartialEq)]
-struct SubgraphData {
-    id: String,
-    label: String,
-    style: String,
+pub struct SubgraphData {
+    pub id: String,
+    pub label: Option<String>,
+    pub style: Option<String>,
+    pub nodes: Vec<String>,
 }
+
+impl GraphData {
+    pub fn from_ast(ast_graph: &ast::Graph<Att>) -> Self {
+        // Create canonical representation for edges
+        let canonical_graph = canonical::Graph::from(ast_graph.clone());
+
+        // Extract graph label
+        let label = find_graph_label(&ast_graph.stmts);
+
+        // Extract nodes
+        let mut nodes = Vec::new();
+        let mut subgraphs = Vec::new();
+        let mut node_to_subgraph = HashMap::new();
+
+        // Process all statements to extract nodes and subgraphs
+        extract_nodes_and_subgraphs(
+            &ast_graph.stmts,
+            &mut nodes,
+            &mut subgraphs,
+            &mut node_to_subgraph,
+            None,
+        );
+
+        // Extract edges using canonical representation
+        let edges = canonical_graph
+            .edges
+            .set
+            .iter()
+            .map(|edge| Edge {
+                id: format!("{}-{}", edge.from, edge.to),
+                source: edge.from.clone(),
+                target: edge.to.clone(),
+                label: edge.attr.elems.iter().find_map(|(k, v)| {
+                    if *k == "label" {
+                        Some(v.trim_matches('"').to_string())
+                    } else {
+                        None
+                    }
+                }),
+            })
+            .collect();
+
+        GraphData {
+            nodes,
+            edges,
+            label,
+            subgraphs,
+        }
+    }
+}
+
+// Find the graph label in statements
+fn find_graph_label(stmts: &ast::StmtList<Att>) -> Option<String> {
+    for stmt in stmts {
+        match stmt {
+            ast::Stmt::AttrStmt(ast::AttrStmt::Graph(attr_list)) => {
+                for element in &attr_list.elems {
+                    for elem in &element.elems {
+                        if elem.0 == "label" {
+                            return Some(elem.1.trim_matches('"').to_string());
+                        }
+                    }
+                }
+            }
+            ast::Stmt::IDEq(key, value) => {
+                if key == "label" {
+                    return Some(value.trim_matches('"').to_string());
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+// Extract nodes and subgraphs from AST statements
+fn extract_nodes_and_subgraphs(
+    stmts: &ast::StmtList<Att>,
+    nodes: &mut Vec<NodeData>,
+    subgraphs: &mut Vec<SubgraphData>,
+    node_to_subgraph: &mut HashMap<String, String>,
+    parent_subgraph_id: Option<String>,
+) {
+    for stmt in stmts {
+        match stmt {
+            ast::Stmt::NodeStmt(node_stmt) => {
+                // Extract node info
+                let node_id = node_stmt.node.id.clone();
+                let node_label = node_stmt.attr.as_ref().and_then(|attr| {
+                    attr.clone().flatten().into_iter().find_map(|(key, value)| {
+                        if key == "label" {
+                            Some(value.trim_matches('"').to_string())
+                        } else {
+                            None
+                        }
+                    })
+                });
+
+                nodes.push(NodeData {
+                    id: node_id.clone(),
+                    label: node_label,
+                });
+
+                // Associate node with subgraph if we're in one
+                if let Some(subgraph_id) = &parent_subgraph_id {
+                    node_to_subgraph.insert(node_id.clone(), subgraph_id.clone());
+
+                    // This is key: Add the node to the current subgraph's node list
+                    if let Some(subgraph) = subgraphs.iter_mut().find(|s| &s.id == subgraph_id) {
+                        subgraph.nodes.push(node_id);
+                    }
+                }
+            }
+            ast::Stmt::Subgraph(subgraph) => {
+                // Extract subgraph ID
+                let subgraph_id = subgraph
+                    .id
+                    .clone()
+                    .unwrap_or_else(|| format!("cluster_{}", subgraphs.len()));
+
+                // Extract subgraph attributes (label, style)
+                let mut label = None;
+                let mut style = None;
+
+                for sub_stmt in &subgraph.stmts {
+                    match sub_stmt {
+                        ast::Stmt::IDEq(attr_name, attr_value) => {
+                            if attr_name == "label" {
+                                label = Some(attr_value.trim_matches('"').to_string());
+                            } else if attr_name == "style" {
+                                style = Some(attr_value.trim_matches('"').to_string());
+                            }
+                        }
+                        ast::Stmt::AttrStmt(ast::AttrStmt::Graph(attr_list)) => {
+                            for element in &attr_list.elems {
+                                for elem in &element.elems {
+                                    if elem.0 == "label" {
+                                        label = Some(elem.1.trim_matches('"').to_string());
+                                    } else if elem.0 == "style" {
+                                        style = Some(elem.1.trim_matches('"').to_string());
+                                    }
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+
+                // Create the subgraph with empty nodes list
+                let sub_data = SubgraphData {
+                    id: subgraph_id.clone(),
+                    label,
+                    style,
+                    nodes: Vec::new(),
+                };
+
+                subgraphs.push(sub_data);
+
+                // Process the subgraph's contents recursively
+                extract_nodes_and_subgraphs(
+                    &subgraph.stmts,
+                    nodes,
+                    subgraphs,
+                    node_to_subgraph,
+                    Some(subgraph_id),
+                );
+            }
+            _ => {}
+        }
+    }
+}
+
 fn main() {
     dioxus::launch(App);
 }
@@ -51,19 +242,19 @@ pub fn App() -> Element {
             1 [label="Start"];
             2 [label="Process"];
             3 [label="Decision"];
-            1 -> 2;
-            2 -> 3;
+            1 -> 2 [label="begin"];
+            2 -> 3 [label="analyze"];
         }
-        
+
         subgraph cluster_1 {
             label="Process B";
             style="dashed";
             4 [label="Output"];
             5 [label="End"];
-            4 -> 5;
+            4 -> 5 [label="finalize"];
         }
         
-        3 -> 4;
+        3 -> 4 [label="continue"];
         3 -> 5 [label="bypass"];
     }"#;
 
@@ -81,6 +272,8 @@ pub fn Graph(dot: &'static str) -> Element {
         })
     });
 
+    let graph_data = use_memo(move || GraphData::from_ast(&ast.read()));
+
     // Main render
     rsx! {
         // Add stylesheets
@@ -93,7 +286,7 @@ pub fn Graph(dot: &'static str) -> Element {
 
             // Header
             div {
-                class: " bg-white shadow-sm border-b border-slate-200 p-4",
+                class: "bg-white shadow-sm border-b border-slate-200 p-4",
                 div {
                     class: "container mx-auto flex items-center justify-between",
                     div {
@@ -112,60 +305,34 @@ pub fn Graph(dot: &'static str) -> Element {
             // Canvas component
             div {
                 class: "flex-1 overflow-hidden",
-                Canvas { ast }
+                Canvas { graph_data }
             }
         }
     }
 }
 
-/// Canvas component with "data-canvas": "true", data attribute
 #[component]
-fn Canvas(ast: Signal<dot_parser::ast::Graph<Att>>) -> Element {
-    let graph = canonical::Graph::from(ast.read().clone());
+fn Canvas(graph_data: Memo<GraphData>) -> Element {
     rsx! {
         div {
             class: "relative w-full h-full overflow-auto p-8 flex flex-col items-center justify-center",
             "data-canvas": "true",
             div {
                 class: "bg-white rounded-xl shadow-lg p-6 min-w-[500px] flex flex-wrap items-start justify-center",
-                GraphLabelComponent { stmts: ast.read().stmts.clone() }
-                StmtListComponent { stmts: ast.read().stmts.clone() }
-                AllEdgesWithMounted { edges: graph.edges.set.iter().map(|edge| Edge {
-                    id: format!("{}-{}", edge.from, edge.to),
-                    source: edge.from.clone(),
-                    target: edge.to.clone(),
-                }).collect() }
+                GraphLabelComponent { graph_data}
+                GraphContentComponent { graph_data}
+                AllEdgesWithMounted { edges: graph_data.read().edges.clone() }
             }
         }
     }
 }
 
-/// Find graph label in statements
 #[component]
-fn GraphLabelComponent(stmts: ast::StmtList<Att>) -> Element {
-    let graph_label: String = stmts
-        .into_iter()
-        .find_map(|stmt| match stmt {
-            ast::Stmt::AttrStmt(ast::AttrStmt::Graph(attr_list)) => {
-                attr_list.elems.iter().find_map(|element| {
-                    element.elems.iter().find_map(|elem| {
-                        if elem.0 == "label" {
-                            Some(elem.1.trim_matches('"').to_string())
-                        } else {
-                            None
-                        }
-                    })
-                })
-            }
-            ast::Stmt::IDEq(key, value) => {
-                if key == "label" {
-                    Some(value.trim_matches('"').to_string())
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        })
+fn GraphLabelComponent(graph_data: Memo<GraphData>) -> Element {
+    let graph_label = graph_data
+        .read()
+        .label
+        .clone()
         .unwrap_or_else(|| "Graph".to_string());
 
     rsx! {
@@ -175,99 +342,77 @@ fn GraphLabelComponent(stmts: ast::StmtList<Att>) -> Element {
         }
     }
 }
-// Updated AllNodes component - add data attributes for easier selection
+
 #[component]
-fn StmtListComponent(stmts: ast::StmtList<Att>) -> Element {
+fn GraphContentComponent(graph_data: Memo<GraphData>) -> Element {
+    let data = graph_data.read();
+
+    // Get standalone nodes (not in any subgraph)
+    let nodes_in_subgraphs: HashSet<_> = data
+        .subgraphs
+        .iter()
+        .flat_map(|sg| sg.nodes.iter().cloned())
+        .collect();
+
+    let standalone_nodes: Vec<_> = data
+        .nodes
+        .iter()
+        .filter(|node| !nodes_in_subgraphs.contains(&node.id))
+        .collect();
+
     rsx! {
-        {stmts.into_iter().map(|stmt| {
-            match stmt {
-                ast::Stmt::NodeStmt(node_stmt) => {
-                    let node = &node_stmt.node;
-                    // get label from attributes, if option exists
-                    let label = node_stmt
-                        .attr
-                        .map(|attr| {
-                            attr.flatten()
-                                .into_iter()
-                                .find_map(|(key, value)| {
-                                    if key == "label" {
-                                        // Remove quotes from the label
-                                        Some(value.trim_matches('"'))
-                                    } else {
-                                        None
-                                    }
-                                })
-                                .unwrap_or("No label")
-                        })
-                        .unwrap_or("No label");
+        // Render subgraphs
+        {data.subgraphs.iter().map(|subgraph| {
+            let subgraph_id = &subgraph.id;
+            let label = subgraph.label.as_deref().unwrap_or("");
+            let border_style = if subgraph.style.as_deref() == Some("dashed") { "border-dashed" } else { "border-solid" };
 
-                    rsx! {
-                        div {
-                            id: "{node.id}",
-                            class: "bg-white border border-gray-300 rounded-lg p-3 shadow-md hover:shadow-lg transition-all duration-200 m-2 min-w-[120px] cursor-pointer hover:bg-blue-50",
-                            "data-node": "true",
-                            "{node.id}) {label}"
-                        }
-                    }
-                }
-                ast::Stmt::Subgraph(subgraph) => {
-                    // Extract subgraph attributes
-                    let subgraph_id = subgraph.id.clone().unwrap_or_else(|| "cluster".to_string());
+            // Find nodes for this subgraph
+            let subgraph_nodes: Vec<_> = data.nodes.iter()
+                .filter(|node| subgraph.nodes.contains(&node.id))
+                .collect();
 
-                    // Extract label and style from attributes
-                    let mut label = "";
-                    let mut style = "solid";
+            rsx! {
+                div {
+                    id: "{subgraph_id}",
+                    class: "relative flex flex-wrap rounded-lg p-4 m-3 bg-slate-50 border-2 {border_style} border-slate-300",
+                    "data-subgraph": "true",
 
-                    // Process all statements to find attributes
-                    for sub_stmt in &subgraph.stmts {
-                        match sub_stmt {
-                            // Handle the IDEq variant which contains attributes like label and style
-                            ast::Stmt::IDEq(attr_name, attr_value) => {
-                                if attr_name == "label" {
-                                    label = attr_value.trim_matches('"');
-                                } else if attr_name == "style" {
-                                    style = attr_value.trim_matches('"');
-                                }
-                            }
-                            // Keep the original handling for AttrStmt as a fallback
-                            ast::Stmt::AttrStmt(ast::AttrStmt::Graph(attr_list)) => {
-                                for element in attr_list.elems.iter() {
-                                    for elem in &element.elems {
-                                        if elem.0 == "label" {
-                                            label = elem.1.trim_matches('"');
-                                        } else if elem.0 == "style" {
-                                            style = elem.1.trim_matches('"');
-                                        }
-                                    }
-                                }
-                            }
-                            _ => {}
-                        }
+                    // Subgraph label
+                    div {
+                        class: "absolute -top-3 left-4 px-2 bg-slate-50 text-sm font-medium text-slate-700",
+                        "{label}"
                     }
 
-                    let border_style = if style == "dashed" { "border-dashed" } else { "border-solid" };
+                    // Render nodes in this subgraph
+                    {subgraph_nodes.iter().map(|node| {
+                        let node_id = &node.id;
+                        let node_label = node.label.as_deref().unwrap_or(&node.id);
 
-                    // Recursively render subgraph stmts in a container
-                    rsx! {
-                        div {
-                            id: "{subgraph_id}",
-                            class: "relative flex flex-wrap rounded-lg p-4 m-3 bg-slate-50 border-2 {border_style} border-slate-300",
-                            "data-subgraph": "true",
-
-                            // Subgraph label
+                        rsx! {
                             div {
-                                class: "absolute -top-3 left-4 px-2 bg-slate-50 text-sm font-medium text-slate-700",
-                                "{label}"
+                                id: "{node_id}",
+                                class: "bg-white border border-gray-300 rounded-lg p-3 shadow-md hover:shadow-lg transition-all duration-200 m-2 min-w-[120px] cursor-pointer hover:bg-blue-50",
+                                "data-node": "true",
+                                "{node_id}) {node_label}"
                             }
-
-                            // Render all children of the subgraph
-                            StmtListComponent { stmts: subgraph.stmts.clone() }
                         }
-                    }
+                    })}
                 }
-                _ => {
-                    // Handle other statements if needed
-                    rsx! {}
+            }
+        })}
+
+        // Render standalone nodes
+        {standalone_nodes.iter().map(|node| {
+            let node_id = &node.id;
+            let node_label = node.label.as_deref().unwrap_or(&node.id);
+
+            rsx! {
+                div {
+                    id: "{node_id}",
+                    class: "bg-white border border-gray-300 rounded-lg p-3 shadow-md hover:shadow-lg transition-all duration-200 m-2 min-w-[120px] cursor-pointer hover:bg-blue-50",
+                    "data-node": "true",
+                    "{node_id}) {node_label}"
                 }
             }
         })}
@@ -319,7 +464,7 @@ fn AllEdgesWithMounted(edges: Vec<Edge>) -> Element {
             let w = window.inner_width().unwrap().as_f64().unwrap() as i32;
             let h = window.inner_height().unwrap().as_f64().unwrap() as i32;
             window_size.set((w, h));
-        }) as Box<dyn FnMut()>); // Note: FnMut instead of Fn
+        }) as Box<dyn FnMut()>);
 
         window
             .add_event_listener_with_callback("resize", update_size.as_ref().unchecked_ref())
@@ -343,6 +488,11 @@ fn AllEdgesWithMounted(edges: Vec<Edge>) -> Element {
         svg {
             class: "absolute top-0 left-0 w-full h-full pointer-events-none overflow-visible",
             {arrow_paths.read().iter().map(|(edge_id, svg_data)| {
+                // Find the edge to get its label
+                let edge_label = edges_ref.read().iter()
+                    .find(|e| &e.id == edge_id)
+                    .and_then(|e| e.label.clone());
+
                 rsx! {
                     g {
                         key: "{edge_id}",
@@ -357,6 +507,31 @@ fn AllEdgesWithMounted(edges: Vec<Edge>) -> Element {
                             fill: "#4b5563", // gray-600
                             transform: "{svg_data.arrow_transform}"
                         }
+
+                        // Render edge label if present
+                        {edge_label.map(|label| {
+                            rsx! {
+                                rect {
+                                    x: "{svg_data.label_x - 20.0}",
+                                    y: "{svg_data.label_y - 10.0}",
+                                    width: "40",
+                                    height: "20",
+                                    rx: "5",
+                                    ry: "5",
+                                    fill: "white",
+                                    opacity: "0.8"
+                                }
+                                text {
+                                    x: "{svg_data.label_x}",
+                                    y: "{svg_data.label_y}",
+                                    fill: "#4b5563",
+                                    "font-size": "12px",
+                                    "text-anchor": "middle",
+                                    "dy": "0.3em",
+                                    "{label}"
+                                }
+                            }
+                        })}
                     }
                 }
             })}
@@ -368,6 +543,8 @@ fn AllEdgesWithMounted(edges: Vec<Edge>) -> Element {
 struct EdgeSvgData {
     path: String,
     arrow_transform: String,
+    label_x: f64,
+    label_y: f64,
 }
 
 fn generate_arrow_path_safe(edge: &Edge) -> Result<EdgeSvgData, String> {
@@ -434,9 +611,42 @@ fn generate_arrow_path_safe(edge: &Edge) -> Result<EdgeSvgData, String> {
     let end_angle_as_degrees = angle_end * (180.0 / PI);
     let arrow_transform = format!("translate({}, {}) rotate({})", ex, ey, end_angle_as_degrees);
 
+    // Calculate midpoint on the curve (t=0.5 on the quadratic bezier)
+    let t = 0.5;
+    let mt = 1.0 - t;
+    let mid_x = mt * mt * sx + 2.0 * mt * t * cx + t * t * ex;
+    let mid_y = mt * mt * sy + 2.0 * mt * t * cy + t * t * ey;
+
+    // Calculate tangent vector at midpoint
+    let dx_mid = 2.0 * (mt * (cx - sx) + t * (ex - cx));
+    let dy_mid = 2.0 * (mt * (cy - sy) + t * (ey - cy));
+
+    // Calculate normal vector (perpendicular to tangent)
+    let len = (dx_mid * dx_mid + dy_mid * dy_mid).sqrt();
+    let nx = -dy_mid / len;
+    let ny = dx_mid / len;
+
+    // Determine which side is the "outside" of the curve
+    // We compare the control point position relative to the straight line between start and end
+    let center_x = (sx + ex) / 2.0;
+    let center_y = (sy + ey) / 2.0;
+    let control_side = (cx - center_x) * (ey - sy) - (cy - center_y) * (ex - sx);
+
+    // Adjust normal direction based on the curve's concavity
+    // This ensures the label is always on the "outside" of the curve
+    let offset = 20.0; // pixels to offset label from curve
+    let adjusted_nx = if control_side > 0.0 { nx } else { -nx };
+    let adjusted_ny = if control_side > 0.0 { ny } else { -ny };
+
+    // Position the label at midpoint + offset in correct normal direction
+    let label_x = mid_x + adjusted_nx * offset;
+    let label_y = mid_y + adjusted_ny * offset;
+
     Ok(EdgeSvgData {
         path,
         arrow_transform,
+        label_x,
+        label_y,
     })
 }
 
