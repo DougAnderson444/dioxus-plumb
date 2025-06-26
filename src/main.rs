@@ -15,7 +15,6 @@ const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
 
 type Att = (&'static str, &'static str);
 
-/// Newtype for the EdgeStmt since they
 #[derive(Clone, Debug, PartialEq)]
 struct Edge {
     id: String,
@@ -44,7 +43,7 @@ fn main() {
 
 #[component]
 pub fn App() -> Element {
-    let initial_dot = r#"digraph G {
+    let dot = r#"digraph G {
         label="Rust Dioxus Graph";  // Name for the whole graph
         subgraph cluster_0 {
             label="Process A";
@@ -68,8 +67,15 @@ pub fn App() -> Element {
         3 -> 5 [label="bypass"];
     }"#;
 
+    rsx! {
+        Graph { dot }
+    }
+}
+
+#[component]
+pub fn Graph(dot: &'static str) -> Element {
     let ast = use_signal(|| {
-        ast::Graph::try_from(initial_dot).unwrap_or_else(|_| {
+        ast::Graph::try_from(dot).unwrap_or_else(|_| {
             // Fallback to empty graph on parse error
             ast::Graph::try_from("digraph G { }").unwrap()
         })
@@ -134,36 +140,31 @@ fn Canvas(ast: Signal<dot_parser::ast::Graph<Att>>) -> Element {
     }
 }
 
+/// Find graph label in statements
 #[component]
 fn GraphLabelComponent(stmts: ast::StmtList<Att>) -> Element {
-    tracing::debug!("GraphLabelComponent called with statements: {:?}", stmts);
-    // Find graph label in statements
     let graph_label: String = stmts
         .into_iter()
-        .find_map(|stmt| {
-            match stmt {
-                // Check for labels in AttrStmt::Graph
-                ast::Stmt::AttrStmt(ast::AttrStmt::Graph(attr_list)) => {
-                    attr_list.elems.iter().find_map(|element| {
-                        element.elems.iter().find_map(|elem| {
-                            if elem.0 == "label" {
-                                Some(elem.1.trim_matches('"').to_string())
-                            } else {
-                                None
-                            }
-                        })
+        .find_map(|stmt| match stmt {
+            ast::Stmt::AttrStmt(ast::AttrStmt::Graph(attr_list)) => {
+                attr_list.elems.iter().find_map(|element| {
+                    element.elems.iter().find_map(|elem| {
+                        if elem.0 == "label" {
+                            Some(elem.1.trim_matches('"').to_string())
+                        } else {
+                            None
+                        }
                     })
-                }
-                // Also check for direct IDEq statements for label
-                ast::Stmt::IDEq(key, value) => {
-                    if key == "label" {
-                        Some(value.trim_matches('"').to_string())
-                    } else {
-                        None
-                    }
-                }
-                _ => None,
+                })
             }
+            ast::Stmt::IDEq(key, value) => {
+                if key == "label" {
+                    Some(value.trim_matches('"').to_string())
+                } else {
+                    None
+                }
+            }
+            _ => None,
         })
         .unwrap_or_else(|| "Graph".to_string());
 
@@ -199,8 +200,6 @@ fn StmtListComponent(stmts: ast::StmtList<Att>) -> Element {
                                 .unwrap_or("No label")
                         })
                         .unwrap_or("No label");
-
-                    tracing::debug!("Rendering node: {}", node.id);
 
                     rsx! {
                         div {
@@ -394,8 +393,6 @@ fn generate_arrow_path_safe(edge: &Edge) -> Result<EdgeSvgData, String> {
     let target = get_coords(&target_el);
     let canvas = get_coords(&canvas_el);
 
-    tracing::debug!("Source: {:?}, Target: {:?}", source, target);
-
     let x_0 = source.left - canvas.left;
     let y_0 = source.top - canvas.top;
     let x_1 = target.left - canvas.left;
@@ -408,8 +405,6 @@ fn generate_arrow_path_safe(edge: &Edge) -> Result<EdgeSvgData, String> {
 
     let start = Pos2 { x: x_0, y: y_0 }; // Use top-left instead of center
     let end = Pos2 { x: x_1, y: y_1 }; // Use top-left instead of center
-
-    tracing::debug!("Start: {:?}, End: {:?}", start, end);
 
     let start_size = Vec2 { x: w_0, y: h_0 };
 
