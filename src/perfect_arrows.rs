@@ -214,7 +214,7 @@ pub fn get_box_to_box_arrow(
         let se1 = Pos2 { x: sex1, y: sey1 };
         let emp = get_point_between(&se0, &se1, 0.5);
 
-        get_point_between(&te, &emp, 0.25 + overlap_effect * 0.25)
+        get_point_between(te, &emp, 0.25 + overlap_effect * 0.25)
     };
 
     let m1 = get_point_between(&start, &end, 0.5);
