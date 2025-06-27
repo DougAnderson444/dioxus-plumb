@@ -1,10 +1,11 @@
+//! Draw svg Edges between nodes in a graph
 use crate::perfect_arrows::{get_box_to_box_arrow, ArrowOptions, Pos2, Vec2};
 use dioxus::logger::tracing;
 use dioxus::prelude::*;
 use std::f64::consts::PI;
 
-/// edge-arena const string slice
-pub const EDGE_ARENA_ID: &str = "edge-arena";
+// /// edge-arena const string slice
+// pub const EDGE_ARENA_ID: &str = "edge-arena";
 
 #[derive(Clone, Debug, PartialEq)]
 struct Rect {
@@ -40,15 +41,12 @@ pub fn EdgeArena(edges: Vec<EdgeData>, children: Element) -> Element {
     rsx! {
         div {
             class: "relative w-full h-full",
-            id: EDGE_ARENA_ID,
+            "data-edge-arena": true,
 
             {children}
 
             svg {
                 class: "absolute top-0 left-0 w-full h-full pointer-events-none overflow-visible",
-                style: "pointer-events: all;",
-
-                // Render edges
                 {edges.iter().map(|edge| {
                     rsx! {
                         EdgeRenderer {
@@ -148,9 +146,10 @@ fn generate_arrow_path_safe(edge: &EdgeData) -> Result<EdgeSvgData, String> {
         .ok_or(format!("Target node not found: {}", edge.target))?;
 
     // Get the content container
-    let content_el = document
-        .get_element_by_id(EDGE_ARENA_ID)
-        .ok_or("Content container not found")?;
+    let content_el = source_el
+        .closest("[data-edge-arena]")
+        .map_err(|_| format!("Content container not found for edge {}", edge.id))?
+        .ok_or(format!("Content container not found for edge {}", edge.id))?;
 
     // Get element coordinates
     let source = get_coords(&source_el);

@@ -1,7 +1,7 @@
 use dot_parser::{ast, canonical};
 use std::collections::HashMap;
 
-use crate::components::edge_renderer::EdgeData;
+use crate::edge_renderer::EdgeData;
 
 type Att<'a> = (&'a str, &'a str);
 
@@ -25,9 +25,6 @@ pub struct NodeData {
 
 impl GraphData {
     pub fn from_ast(ast_graph: &ast::Graph<Att>) -> Self {
-        // Create canonical representation for edges
-        let canonical_graph = canonical::Graph::from(ast_graph.clone());
-
         // Extract graph label and ID
         let label = find_graph_label(&ast_graph.stmts);
         let id = "G".to_string(); // Default graph ID
@@ -47,6 +44,9 @@ impl GraphData {
 
         // Parse statements to build the graph structure
         parse_statements(&ast_graph.stmts, &mut graph, "", &mut node_id_map);
+
+        // Create canonical representation for edges
+        let canonical_graph = canonical::Graph::from(ast_graph.clone());
 
         // Process edges from canonical representation
         // All edges will be stored only at the top level
@@ -79,6 +79,42 @@ impl GraphData {
 
         graph
     }
+}
+
+/// Parse DOT into Vec<EdgeData>
+///
+/// It is the caller's responsibility to ensure that the node id are unique
+pub fn parse_edges(dot: &str) -> Result<Vec<EdgeData>, String> {
+    let ast_graph = dot_parser::ast::Graph::<(&str, &str)>::try_from(dot)
+        .map_err(|err| format!("Failed to parse DOT: {}", err))?;
+    // Create canonical representation for edges
+    let canonical_graph = canonical::Graph::from(ast_graph.clone());
+
+    // Process edges from canonical representation
+    // All edges will be stored only at the top level
+    Ok(canonical_graph
+        .edges
+        .set
+        .iter()
+        .map(|edge| {
+            // Get the actual node IDs as they exist in our structure
+            let source = edge.from.trim_matches('"');
+            let target = edge.to.trim_matches('"');
+
+            EdgeData {
+                id: format!("{}-{}", source, target),
+                source: source.to_string(),
+                target: target.to_string(),
+                label: edge.attr.elems.iter().find_map(|(k, v)| {
+                    if *k == "label" {
+                        Some(v.trim_matches('"').to_string())
+                    } else {
+                        None
+                    }
+                }),
+            }
+        })
+        .collect())
 }
 
 // Find the graph label in statements

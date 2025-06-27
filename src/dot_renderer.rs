@@ -1,6 +1,6 @@
 //! Generic approach where any component can become a DOT node renderer by implementing a trait
 use crate::{
-    components::edge_renderer::{self, EdgeArena},
+    edge_renderer::EdgeArena,
     graph_data::{GraphData, NodeData},
 };
 use dioxus::prelude::*;
@@ -48,7 +48,6 @@ pub fn DotGraph<R: DotNodeRenderer + PartialEq + 'static>(props: DotGraphProps<R
         div {
             class: "relative {props.class.clone().unwrap_or_default()}",
             id: "graph-container",
-            style: "position: relative;",
 
             // Graph title if available
             if let Some(label) = &graph.label {
