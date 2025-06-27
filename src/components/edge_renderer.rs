@@ -1,5 +1,6 @@
 use crate::graph_data::EdgeData;
 use crate::perfect_arrows::{get_box_to_box_arrow, ArrowOptions, Pos2, Vec2};
+use dioxus::logger::tracing;
 use dioxus::prelude::*;
 use std::{collections::HashMap, f64::consts::PI};
 use wasm_bindgen::{prelude::*, JsCast};
@@ -10,6 +11,8 @@ struct Rect {
     right: f64,
     bottom: f64,
     left: f64,
+    width: f64,
+    height: f64,
 }
 
 #[derive(Clone, Debug)]
@@ -18,6 +21,82 @@ struct EdgeSvgData {
     arrow_transform: String,
     label_x: f64,
     label_y: f64,
+}
+
+/// A simple component wrapper for edge rendering
+#[component]
+pub fn EdgeRenderer(edge: EdgeData) -> Element {
+    let mut svg_data = use_signal(|| None::<EdgeSvgData>);
+
+    // Calculate the arrow path when the component mounts
+    let edge_clone = edge.clone();
+    spawn(async move {
+        // Small delay to ensure elements are rendered
+        gloo_timers::future::TimeoutFuture::new(300).await;
+
+        match generate_arrow_path_safe(&edge_clone) {
+            Ok(data) => svg_data.set(Some(data)),
+            Err(err) => {
+                web_sys::console::log_1(&wasm_bindgen::JsValue::from_str(&format!(
+                    "Error calculating edge {}: {}",
+                    edge_clone.id, err
+                )));
+            }
+        }
+    });
+    let svg_data = svg_data.read();
+    // If we don't have SVG data yet, render nothing
+    if svg_data.is_none() {
+        return rsx! { g {} };
+    }
+
+    let data = svg_data.as_ref().unwrap();
+    let edge_label = edge.label.clone();
+
+    rsx! {
+        g {
+            key: "{edge.id}",
+            path {
+                d: "{data.path}",
+                fill: "none",
+                stroke: "#d1d5db",
+                "stroke-width": "4",
+                class: "edge",
+                style: "transition: stroke 0.2s ease; pointer-events: stroke;",
+                "stroke-opacity": "0.5"
+            }
+            polygon {
+                points: "-8,-6 0,0 -8,6",
+                fill: "#d1d5db",
+                transform: "{data.arrow_transform}",
+                class: "arrow",
+                style: "transition: fill 0.2s ease; pointer-events: stroke;",
+            }
+
+            // Render edge label if present
+            if let Some(label) = edge_label {
+                rect {
+                    x: "{data.label_x - 20.0}",
+                    y: "{data.label_y - 10.0}",
+                    width: "40",
+                    height: "20",
+                    rx: "5",
+                    ry: "5",
+                    fill: "white",
+                    opacity: "0.8"
+                }
+                text {
+                    x: "{data.label_x}",
+                    y: "{data.label_y}",
+                    fill: "#4b5563",
+                    "font-size": "12px",
+                    "text-anchor": "middle",
+                    "dy": "0.3em",
+                    "{label}"
+                }
+            }
+        }
+    }
 }
 
 #[component]
@@ -97,7 +176,6 @@ pub fn AllEdgesWithMounted(edges: Vec<EdgeData>) -> Element {
                     .and_then(|e| e.label.clone());
                 // Define colors outside of the string interpolation
                 let default_color = "#d1d5db";
-                let hover_color = "#4b5563";
                 let stroke_opacity = "0.5";
 
                 rsx! {
@@ -155,29 +233,31 @@ fn generate_arrow_path_safe(edge: &EdgeData) -> Result<EdgeSvgData, String> {
     let window = web_sys::window().ok_or("No window")?;
     let document = window.document().ok_or("No document")?;
 
-    // Much simpler and faster - direct ID lookup
+    // Get node elements
     let source_el = document
         .get_element_by_id(&edge.source)
-        .ok_or("Source element not found")?;
+        .ok_or(format!("Source node not found: {}", edge.source))?;
 
     let target_el = document
         .get_element_by_id(&edge.target)
-        .ok_or("Target element not found")?;
+        .ok_or(format!("Target node not found: {}", edge.target))?;
 
-    let canvas_el = source_el
-        .closest("[data-canvas]")
-        .map_err(|_| "Canvas query failed")?
-        .ok_or("Canvas element not found")?;
+    // Get the content container
+    let content_el = document
+        .get_element_by_id("graph-content")
+        .ok_or("Content container not found")?;
 
-    // Get coordinates
+    // Get element coordinates
     let source = get_coords(&source_el);
     let target = get_coords(&target_el);
-    let canvas = get_coords(&canvas_el);
+    let content = get_coords(&content_el);
 
-    let x_0 = source.left - canvas.left;
-    let y_0 = source.top - canvas.top;
-    let x_1 = target.left - canvas.left;
-    let y_1 = target.top - canvas.top;
+    // Calculate positions relative to the content container
+    // This is the key change - we use the content container as the reference
+    let x_0 = source.left - content.left;
+    let y_0 = source.top - content.top;
+    let x_1 = target.left - content.left;
+    let y_1 = target.top - content.top;
 
     let w_0 = source.right - source.left;
     let h_0 = source.bottom - source.top;
@@ -255,10 +335,21 @@ fn generate_arrow_path_safe(edge: &EdgeData) -> Result<EdgeSvgData, String> {
 
 fn get_coords(el: &web_sys::Element) -> Rect {
     let rect = el.get_bounding_client_rect();
+
+    // Get window scroll position
+    let window = web_sys::window().unwrap();
+    let page_x_offset = window.page_x_offset().unwrap_or(0.0);
+    let page_y_offset = window.page_y_offset().unwrap_or(0.0);
+
+    // Calculate absolute position (relative to document)
     Rect {
-        top: rect.top() + web_sys::window().unwrap().page_y_offset().unwrap_or(0.0),
-        right: rect.right() + web_sys::window().unwrap().page_x_offset().unwrap_or(0.0),
-        bottom: rect.bottom() + web_sys::window().unwrap().page_y_offset().unwrap_or(0.0),
-        left: rect.left() + web_sys::window().unwrap().page_x_offset().unwrap_or(0.0),
+        top: rect.top() + page_y_offset,
+        right: rect.right() + page_x_offset,
+        bottom: rect.bottom() + page_y_offset,
+        left: rect.left() + page_x_offset,
+
+        // Add these for more accurate positioning
+        width: rect.width(),
+        height: rect.height(),
     }
 }

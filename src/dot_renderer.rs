@@ -42,91 +42,105 @@ pub fn DotGraph<R: DotNodeRenderer + PartialEq + 'static>(props: DotGraphProps<R
     }
 
     // Convert to our graph data format
-    let graph_data = GraphData::from_ast(&graph_result.unwrap());
+    let graph = GraphData::from_ast(&graph_result.unwrap());
 
     rsx! {
         div {
             class: "relative {props.class.clone().unwrap_or_default()}",
-            "data-canvas": "true",
+            id: "graph-container",
+            style: "position: relative;",
 
             // Graph title if available
-            if let Some(label) = &graph_data.label {
+            if let Some(label) = &graph.label {
                 h2 {
                     class: "text-lg font-bold mb-4 text-center",
                     "{label}"
                 }
             }
 
+            // Content container - this is what the SVG will position against
             div {
-                class: "flex flex-col gap-6",
-                // Render subgraphs if any
-                {graph_data.subgraphs.iter().map(|subgraph| {
-                    let style_class = match subgraph.style.as_deref() {
-                        Some("dashed") => "border-dashed",
-                        Some("dotted") => "border-dotted",
-                        _ => "border-solid",
-                    };
+                class: "relative w-full h-full",
+                id: "graph-content",
+                "data-canvas": "true",
 
-                    let subgraph_nodes: Vec<_> = graph_data.nodes.iter()
-                        .filter(|node| subgraph.nodes.contains(&node.id))
-                        .collect();
+                // Render all graph nodes and subgraphs (without edges)
+                {render_graph_content(&graph, &props.renderer)}
 
-                    rsx! {
-                        div {
-                            id: "{subgraph.id}",
-                            class: "relative p-4 m-2 bg-slate-50 border-2 {style_class} border-slate-300 rounded-lg",
-                            "data-subgraph": "true",
+                // Place the SVG INSIDE the content container, not after it
+                // This ensures the SVG coordinates are relative to the content container
+                svg {
+                    class: "absolute top-0 left-0 w-full h-full pointer-events-none overflow-visible",
+                    style: "pointer-events: all;",
 
-                            // Subgraph label
-                            if let Some(label) = &subgraph.label {
-                                div {
-                                    class: "absolute -top-3 left-4 px-2 bg-slate-50 text-sm font-bold",
-                                    "{label}"
-                                }
-                            }
-
-                            // Nodes in this subgraph using flex-row
-                            div {
-                                class: "flex flex-row flex-wrap items-center gap-6 justify-start",
-                                // Render nodes in this subgraph using the custom renderer
-                                {subgraph_nodes.iter().map(|node| {
-                                    rsx! {
-                                        div {
-                                            id: "{node.id}",
-                                            "data-node": "true",
-                                            {props.renderer.render_node(node)}
-                                        }
-                                    }
-                                })}
+                    // Render edges
+                    {graph.edges.iter().map(|edge| {
+                        rsx! {
+                            edge_renderer::EdgeRenderer {
+                                edge: edge.clone()
                             }
                         }
-                    }
-                })}
+                    })}
+                }
+            }
+        }
+    }
+}
 
-                // Render standalone nodes (not in any subgraph)
-                if graph_data.nodes.iter().any(|node| !graph_data.subgraphs.iter().any(|sg| sg.nodes.contains(&node.id))) {
+/// Helper function to recursively render graph content WITHOUT edges
+fn render_graph_content<R: DotNodeRenderer + PartialEq>(
+    graph: &GraphData,
+    renderer: &R,
+) -> Element {
+    rsx! {
+        div {
+            class: "flex flex-col gap-6",
+
+            // Render subgraphs recursively
+            {graph.subgraphs.iter().map(|subgraph| {
+                let style_class = match subgraph.style.as_deref() {
+                    Some("dashed") => "border-dashed",
+                    Some("dotted") => "border-dotted",
+                    _ => "border-solid",
+                };
+
+                rsx! {
                     div {
-                        class: "flex flex-row flex-wrap items-center gap-4 justify-center mt-4",
-                        {graph_data.nodes.iter()
-                            .filter(|node| !graph_data.subgraphs.iter().any(|sg| sg.nodes.contains(&node.id)))
-                            .map(|node| {
-                                rsx! {
-                                    div {
-                                        id: "{node.id}",
-                                        "data-node": "true",
-                                        {props.renderer.render_node(node)}
-                                    }
-                                }
-                            })
+                        id: "{subgraph.id}",
+                        class: "relative p-4 m-2 bg-slate-50 border-2 {style_class} border-slate-300 rounded-lg",
+                        "data-subgraph": "true",
+
+                        // Subgraph label
+                        if let Some(label) = &subgraph.label {
+                            div {
+                                class: "absolute -top-3 left-4 px-2 bg-slate-50 text-sm font-bold",
+                                "{label}"
+                            }
                         }
+
+                        // Recursively render the subgraph's content
+                        {render_graph_content(subgraph, renderer)}
                     }
+                }
+            })}
+
+            // Render nodes in this graph level
+            if !graph.nodes.is_empty() {
+                div {
+                    class: "flex flex-row flex-wrap items-center gap-4 justify-start",
+                    {graph.nodes.iter().map(|node| {
+                        rsx! {
+                            div {
+                                id: "{node.id}",
+                                "data-node": "true",
+                                {renderer.render_node(node)}
+                            }
+                        }
+                    })}
                 }
             }
 
-            // Render edges
-            edge_renderer::AllEdgesWithMounted {
-                edges: graph_data.edges
-            }
+            // NO edge rendering here - all edges are rendered at the top level
         }
     }
 }
