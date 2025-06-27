@@ -1,7 +1,10 @@
-use crate::graph_data::EdgeData;
 use crate::perfect_arrows::{get_box_to_box_arrow, ArrowOptions, Pos2, Vec2};
+use dioxus::logger::tracing;
 use dioxus::prelude::*;
 use std::f64::consts::PI;
+
+/// edge-arena const string slice
+pub const EDGE_ARENA_ID: &str = "edge-arena";
 
 #[derive(Clone, Debug, PartialEq)]
 struct Rect {
@@ -13,12 +16,49 @@ struct Rect {
     height: f64,
 }
 
+/// Owned Edge data
+#[derive(Clone, Debug, PartialEq)]
+pub struct EdgeData {
+    pub id: String,
+    pub source: String,
+    pub target: String,
+    pub label: Option<String>,
+}
+
+/// SVG data for rendering edges
 #[derive(Clone, Debug)]
 struct EdgeSvgData {
     path: String,
     arrow_transform: String,
     label_x: f64,
     label_y: f64,
+}
+
+/// Arena that shows the Edges overlaid on the children
+#[component]
+pub fn EdgeArena(edges: Vec<EdgeData>, children: Element) -> Element {
+    rsx! {
+        div {
+            class: "relative w-full h-full",
+            id: EDGE_ARENA_ID,
+
+            {children}
+
+            svg {
+                class: "absolute top-0 left-0 w-full h-full pointer-events-none overflow-visible",
+                style: "pointer-events: all;",
+
+                // Render edges
+                {edges.iter().map(|edge| {
+                    rsx! {
+                        EdgeRenderer {
+                            edge: edge.clone()
+                        }
+                    }
+                })}
+            }
+        }
+    }
 }
 
 /// A simple component wrapper for edge rendering
@@ -30,17 +70,14 @@ pub fn EdgeRenderer(edge: EdgeData) -> Element {
     let edge_clone = edge.clone();
     spawn(async move {
         // Small delay to ensure elements are rendered
-        gloo_timers::future::TimeoutFuture::new(300).await;
+        gloo_timers::future::TimeoutFuture::new(100).await;
 
-        match generate_arrow_path_safe(&edge_clone) {
-            Ok(data) => svg_data.set(Some(data)),
-            Err(err) => {
-                web_sys::console::log_1(&wasm_bindgen::JsValue::from_str(&format!(
-                    "Error calculating edge {}: {}",
-                    edge_clone.id, err
-                )));
-            }
-        }
+        generate_arrow_path_safe(&edge_clone)
+            .map(|data| svg_data.set(Some(data)))
+            .unwrap_or_else(|err| {
+                tracing::error!("Error calculating edge {}: {}", edge_clone.id, err);
+                svg_data.set(None);
+            });
     });
     let svg_data = svg_data.read();
     // If we don't have SVG data yet, render nothing
@@ -112,7 +149,7 @@ fn generate_arrow_path_safe(edge: &EdgeData) -> Result<EdgeSvgData, String> {
 
     // Get the content container
     let content_el = document
-        .get_element_by_id("graph-content")
+        .get_element_by_id(EDGE_ARENA_ID)
         .ok_or("Content container not found")?;
 
     // Get element coordinates

@@ -1,6 +1,8 @@
 use dot_parser::{ast, canonical};
 use std::collections::HashMap;
 
+use crate::components::edge_renderer::EdgeData;
+
 type Att<'a> = (&'a str, &'a str);
 
 /// Unified graph structure that can represent both top-level graphs and subgraphs
@@ -18,15 +20,6 @@ pub struct GraphData {
 #[derive(Clone, Debug, PartialEq)]
 pub struct NodeData {
     pub id: String,
-    pub label: Option<String>,
-}
-
-/// Owned Edge data
-#[derive(Clone, Debug, PartialEq)]
-pub struct EdgeData {
-    pub id: String,
-    pub source: String,
-    pub target: String,
     pub label: Option<String>,
 }
 

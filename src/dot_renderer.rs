@@ -1,6 +1,6 @@
 //! Generic approach where any component can become a DOT node renderer by implementing a trait
 use crate::{
-    components::edge_renderer,
+    components::edge_renderer::{self, EdgeArena},
     graph_data::{GraphData, NodeData},
 };
 use dioxus::prelude::*;
@@ -58,30 +58,9 @@ pub fn DotGraph<R: DotNodeRenderer + PartialEq + 'static>(props: DotGraphProps<R
                 }
             }
 
-            // Content container - this is what the SVG will position against
-            div {
-                class: "relative w-full h-full",
-                id: "graph-content",
-                "data-canvas": "true",
-
-                // Render all graph nodes and subgraphs (without edges)
-                {render_graph_content(&graph, &props.renderer)}
-
-                // Place the SVG INSIDE the content container, not after it
-                // This ensures the SVG coordinates are relative to the content container
-                svg {
-                    class: "absolute top-0 left-0 w-full h-full pointer-events-none overflow-visible",
-                    style: "pointer-events: all;",
-
-                    // Render edges
-                    {graph.edges.iter().map(|edge| {
-                        rsx! {
-                            edge_renderer::EdgeRenderer {
-                                edge: edge.clone()
-                            }
-                        }
-                    })}
-                }
+            EdgeArena {
+                edges: graph.edges.clone(),
+                children: render_graph_content(&graph, &props.renderer)
             }
         }
     }
