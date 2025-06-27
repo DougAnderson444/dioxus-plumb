@@ -26,6 +26,8 @@ pub fn App() -> Element {
 /// Example usage in a component
 #[component]
 fn MyGraphViewer() -> Element {
+    // DIAGRAM EXAMPLE 1
+    // This is a simple project workflow diagram using DOT syntax.
     let dot_content = r#"
         digraph G {
             label="Project Workflow";
@@ -93,6 +95,8 @@ fn MyGraphViewer() -> Element {
         })),
     };
 
+    // DIAGRAM EXAMPLE 2
+    // This is a simple edge arena example with two nodes and an edge between them.
     let node_a = "NodeA";
     let node_b = "NodeB";
     let nodes = [node_a, node_b];
@@ -110,8 +114,6 @@ fn MyGraphViewer() -> Element {
     );
 
     let edges = parse_edges(&dot_edges).unwrap_or_default();
-
-    tracing::debug!("Parsed edges: {:?}", edges);
 
     rsx! {
         div {
