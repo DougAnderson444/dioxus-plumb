@@ -1,9 +1,7 @@
 use crate::graph_data::EdgeData;
 use crate::perfect_arrows::{get_box_to_box_arrow, ArrowOptions, Pos2, Vec2};
-use dioxus::logger::tracing;
 use dioxus::prelude::*;
-use std::{collections::HashMap, f64::consts::PI};
-use wasm_bindgen::{prelude::*, JsCast};
+use std::f64::consts::PI;
 
 #[derive(Clone, Debug, PartialEq)]
 struct Rect {
@@ -95,136 +93,6 @@ pub fn EdgeRenderer(edge: EdgeData) -> Element {
                     "{label}"
                 }
             }
-        }
-    }
-}
-
-#[component]
-pub fn AllEdgesWithMounted(edges: Vec<EdgeData>) -> Element {
-    let mut arrow_paths = use_signal(HashMap::<String, EdgeSvgData>::new);
-    let edges_ref = use_signal(|| edges.clone());
-    let mut initial_load = use_signal(|| true);
-
-    // Store window dimensions to trigger recalculation
-    let mut window_size = use_signal(|| {
-        let window = web_sys::window().unwrap();
-        (
-            window.inner_width().unwrap().as_f64().unwrap() as i32,
-            window.inner_height().unwrap().as_f64().unwrap() as i32,
-        )
-    });
-
-    // Function to calculate all arrows
-    let calculate_arrows = move || {
-        let edges_to_calculate = edges_ref.read().clone();
-        spawn(async move {
-            // Small delay to ensure all sibling elements are rendered
-            if *initial_load.read() {
-                gloo_timers::future::TimeoutFuture::new(190).await;
-            }
-            initial_load.set(false);
-
-            let mut new_paths = HashMap::new();
-            for edge in edges_to_calculate.iter() {
-                if let Ok(svg_data) = generate_arrow_path_safe(edge) {
-                    new_paths.insert(edge.id.clone(), svg_data);
-                }
-            }
-            arrow_paths.set(new_paths);
-        });
-    };
-
-    // Set up resize listener using use_effect
-    use_effect(move || {
-        let window = web_sys::window().unwrap();
-
-        // Use Box::new with FnMut and wrap it as a Box<dyn FnMut()>
-        let update_size = Closure::wrap(Box::new(move || {
-            let window = web_sys::window().unwrap();
-            let w = window.inner_width().unwrap().as_f64().unwrap() as i32;
-            let h = window.inner_height().unwrap().as_f64().unwrap() as i32;
-            window_size.set((w, h));
-        }) as Box<dyn FnMut()>);
-
-        window
-            .add_event_listener_with_callback("resize", update_size.as_ref().unchecked_ref())
-            .unwrap();
-
-        // Keep the closure alive for the lifetime of the component
-        update_size.forget();
-
-        // Calculate arrows initially
-        calculate_arrows();
-    });
-
-    // React to window size changes
-    use_effect(move || {
-        // The dependency on window_size will cause this to run when window size changes
-        let _ = *window_size.read();
-        calculate_arrows();
-    });
-
-    rsx! {
-        svg {
-            class: "absolute top-0 left-0 w-full h-full pointer-events-none overflow-visible",
-            // Enable pointer events on the SVG container
-            style: "pointer-events: all;",
-            {arrow_paths.read().iter().map(|(edge_id, svg_data)| {
-                // Find the edge to get its label
-                let edge_label = edges_ref.read().iter()
-                    .find(|e| &e.id == edge_id)
-                    .and_then(|e| e.label.clone());
-                // Define colors outside of the string interpolation
-                let default_color = "#d1d5db";
-                let stroke_opacity = "0.5";
-
-                rsx! {
-                    g {
-                        key: "{edge_id}",
-                        path {
-                            d: "{svg_data.path}",
-                            fill: "none",
-                            stroke: default_color,
-                            "stroke-width": "4",
-                            class: "edge",
-                            style: "transition: stroke 0.2s ease; pointer-events: stroke;",
-                            "stroke-opacity": stroke_opacity
-                        }
-                        polygon {
-                            points: "-8,-6 0,0 -8,6",
-                            fill: default_color,
-                            transform: "{svg_data.arrow_transform}",
-                            class: "arrow",
-                            style: "transition: fill 0.2s ease; pointer-events: stroke;",
-                        }
-
-                        // Render edge label if present
-                        {edge_label.map(|label| {
-                            rsx! {
-                                rect {
-                                    x: "{svg_data.label_x - 20.0}",
-                                    y: "{svg_data.label_y - 10.0}",
-                                    width: "40",
-                                    height: "20",
-                                    rx: "5",
-                                    ry: "5",
-                                    fill: "white",
-                                    opacity: "0.8"
-                                }
-                                text {
-                                    x: "{svg_data.label_x}",
-                                    y: "{svg_data.label_y}",
-                                    fill: "#4b5563",
-                                    "font-size": "12px",
-                                    "text-anchor": "middle",
-                                    "dy": "0.3em",
-                                    "{label}"
-                                }
-                            }
-                        })}
-                    }
-                }
-            })}
         }
     }
 }

@@ -1,7 +1,7 @@
 //! Generic approach where any component can become a DOT node renderer by implementing a trait
 use crate::{
     components::edge_renderer,
-    graph_data::{EdgeData, GraphData, NodeData},
+    graph_data::{GraphData, NodeData},
 };
 use dioxus::prelude::*;
 
