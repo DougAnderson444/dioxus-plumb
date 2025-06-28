@@ -1,10 +1,10 @@
-use dioxus_plumb::{
-    dot_renderer, edge_renderer::EdgeArena, graph_data::parse_edges, node_renderer,
-};
-
 use dioxus::{logger::tracing, prelude::*};
-use dot_renderer::DotGraph;
-use node_renderer::InteractiveNodeRenderer;
+use dioxus_sdk::storage::use_persistent;
+
+mod examples;
+use examples::edge_arena::EdgeArenaExample;
+use examples::plog::PlogDiagram;
+use examples::workflow::WorkflowExample;
 
 const FAVICON: Asset = asset!("/assets/favicon.ico");
 const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
@@ -23,158 +23,100 @@ pub fn App() -> Element {
     }
 }
 
-/// Example usage in a component
+/// Define the possible examples to display
+#[derive(Clone, PartialEq, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+enum Example {
+    ProjectWorkflow,
+    EdgeArenaDemo,
+    Plog,
+}
+
+impl Example {
+    // Associated constants for string representations
+    const PROJECT_WORKFLOW_STR: &'static str = "Project Workflow (DOT)";
+    const EDGE_ARENA_DEMO_STR: &'static str = "Edge Arena Demo";
+    const PROVENANCE_LOG_STR: &'static str = "Provenance Log";
+
+    fn to_string(&self) -> &'static str {
+        match self {
+            Example::ProjectWorkflow => Self::PROJECT_WORKFLOW_STR,
+            Example::EdgeArenaDemo => Self::EDGE_ARENA_DEMO_STR,
+            Example::Plog => Self::PROVENANCE_LOG_STR,
+        }
+    }
+
+    // Helper to convert string back to Example enum
+    fn from_string(s: &str) -> Option<Self> {
+        match s {
+            Self::PROJECT_WORKFLOW_STR => Some(Example::ProjectWorkflow),
+            Self::EDGE_ARENA_DEMO_STR => Some(Example::EdgeArenaDemo),
+            Self::PROVENANCE_LOG_STR => Some(Example::Plog),
+            _ => None,
+        }
+    }
+
+    // Helper to list all variants for dropdown options (manual list)
+    fn all_variants() -> Vec<Example> {
+        vec![
+            Example::ProjectWorkflow,
+            Example::EdgeArenaDemo,
+            Example::Plog,
+        ]
+    }
+}
+
+/// Component to view different graph examples
 #[component]
 fn MyGraphViewer() -> Element {
-    // DIAGRAM EXAMPLE 1
-    // This is a simple project workflow diagram using DOT syntax.
-    let dot_content = r#"
-        digraph G {
-            label="Project Workflow";
-            
-            subgraph cluster_0 {
-                label="Planning & Development";
-                style="dashed";
-                
-                subgraph cluster_0_1 {
-                    label="Initial Planning";
-                    style="dotted";
-                    start [label="Start Project"];
-                    requirements [label="Requirements"];
-                    planning [label="Planning Phase"];
-                }
-                
-                subgraph cluster_0_2 {
-                    label="Implementation";
-                    style="dotted";
-                    design [label="Design"];
-                    development [label="Development"];
-                }
-            }
-            
-            subgraph cluster_1 {
-                label="Quality & Delivery";
-                style="dashed";
-                
-                subgraph cluster_1_1 {
-                    label="Quality Assurance";
-                    style="dotted";
-                    testing [label="Testing"];
-                    qa_review [label="QA Review"];
-                }
-                
-                subgraph cluster_1_2 {
-                    label="Release";
-                    style="dotted";
-                    deployment [label="Deployment"];
-                    end [label="Project Complete"];
-                }
-            }
-            
-            // Connections between phases
-            start -> requirements;
-            requirements -> planning;
-            planning -> design;
-            design -> development;
-            development -> testing;
-            testing -> qa_review;
-            qa_review -> deployment;
-            deployment -> end;
-            
-            // Feedback loops
-            qa_review -> development [label="Failed QA"];
-            testing -> development [label="Failed Tests"];
-        }
-    "#;
-
-    // Create an interactive renderer with click handler
-    let renderer = InteractiveNodeRenderer {
-        on_node_click: Some(EventHandler::new(|node_id| {
-            println!("Node clicked: {}", node_id);
-            // Handle node click, maybe open a detail panel
-        })),
-    };
-
-    // DIAGRAM EXAMPLE 2
-    // This is a simple edge arena example with two nodes and an edge between them.
-    let node_a = "NodeA";
-    let node_b = "NodeB";
-    let nodes = [node_a, node_b];
-
-    // edges can be derived from the DOT graph or defined manually
-    let dot_edges = format!(
-        r#"
-        digraph G {{
-            label="Edge Arena Edges";
-            "{node_a}" -> "{node_b}" [label="Edge from {node_a} to {node_b}"];
-        }}
-        "#,
-        node_a = node_a,
-        node_b = node_b
-    );
-
-    let edges = parse_edges(&dot_edges).unwrap_or_default();
+    // Use the use_local_storage hook instead of use_state
+    // It takes the storage key and a default value factory
+    let mut selected_example =
+        use_persistent::<Example>("selected_graph_example", || Example::ProjectWorkflow);
 
     rsx! {
         div {
             class: "p-4",
-            h1 { class: "text-2xl font-bold mb-4", "Project Workflow Viewer" }
+            h1 { class: "text-2xl font-bold mb-4", "Graph Examples" }
 
-            // Use the DOT renderer with custom styling for subgraphs
             div {
-                class: "flex flex-col gap-6",
-
-                DotGraph {
-                    dot: dot_content.to_string(),
-                    renderer: renderer,
-                    class: Some("bg-white rounded-xl shadow-lg".to_string())
+                class: "mb-4",
+                label {
+                    class: "block text-gray-700 text-sm font-bold mb-2",
+                    r#for: "example-select",
+                    "Select Example:"
                 }
-            }
+                select {
+                    id: "example-select",
+                    class: "shadow appearance-none border rounded w-full p-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline",
+                    value: selected_example.read().to_string(),
+                    onchange: move |event| {
+                         let value = event.value();
 
+                        tracing::info!("Selected: {:?}", value);
 
-            // Example using Dioxus nodes instead of DOT nodes
-            // and connecting them with edges
-            div {
-                class: "mt-6 border border-gray-300 rounded-xl p-4",
-                h2 { class: "text-xl font-bold mb-4", "Edge Arena Demo" }
-
-                // EdgeArena is the container for the nodes and edges
-                EdgeArena {
-                    edges,
-                    div {
-                        class: "flex flex-col gap-12",
-                        "Describe the edges using DOT, but render nodes using Dioxus components",
-                        // the DOT edge String we are using: (pre and code )
-                        pre { class: "bg-gray-100 rounded p-4",
-                            code { class: "whitespace-pre-wrap overflow-wrap-anywhere text-sm font-mono", "{dot_edges}" }
+                         if let Some(example) = Example::from_string(&value) {
+                             tracing::info!("Setting example to {:?}", example);
+                             selected_example.set(example);
+                         } else {
+                            tracing::warn!("Unknown example selected: {}", value);
+                         }
+                    },
+                    { Example::all_variants().into_iter().map(|ex| {
+                        let s = ex.to_string();
+                        rsx! {
+                            option { value: s, "{s}" }
                         }
+                    }) }
 
-                        // Simple way to render nodes using Dioxus components
-                        {nodes.iter().map(|&node| {
-                            rsx! {
-                                Basic {
-                                    id: node.to_string(),
-                                    h2 { class: "text-xl", "Child Node {node}" }
-                                }
-                            }
-                        })}
-                    }
                 }
             }
-        }
-    }
-}
 
-/// Basic component as "Source A"
-#[component]
-fn Basic(id: String, children: Element) -> Element {
-    rsx! {
-        div {
-            id,
-            class: "p-4 bg-slate-300/60 rounded-lg",
-            h2 { class: "text-xl font-semibold", "Source A" }
-            p { "This is the content of Source {id}." }
-            {children}
+            match *selected_example.read() {
+                Example::ProjectWorkflow => rsx! { WorkflowExample {} },
+                Example::EdgeArenaDemo => rsx! { EdgeArenaExample {} },
+                Example::Plog => rsx! { PlogDiagram {} }
+            }
         }
     }
 }

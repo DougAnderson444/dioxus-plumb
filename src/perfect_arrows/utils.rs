@@ -2,14 +2,16 @@
 use std::f64::consts::PI;
 
 #[repr(C)]
-#[derive(serde::Deserialize, serde::Serialize, Clone, Debug)]
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Vec2 {
     pub x: f64,
     pub y: f64,
 }
 
 #[repr(C)]
-#[derive(serde::Deserialize, serde::Serialize, Clone, Debug)]
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Pos2 {
     pub x: f64,
     pub y: f64,
