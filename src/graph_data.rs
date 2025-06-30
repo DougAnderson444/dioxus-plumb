@@ -1,3 +1,4 @@
+use dioxus::logger::tracing;
 use dot_parser::{ast, canonical};
 use std::collections::HashMap;
 
@@ -5,8 +6,31 @@ use crate::edge_renderer::EdgeData;
 
 type Att<'a> = (&'a str, &'a str);
 
+/// Represents the direction of the graph layout.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum GraphDirection {
+    TopToBottom,
+    LeftToRight,
+}
+
+impl Default for GraphDirection {
+    fn default() -> Self {
+        Self::TopToBottom
+    }
+}
+
+impl GraphDirection {
+    /// Returns the Tailwind CSS class corresponding to the graph direction.
+    pub fn to_class(&self) -> &'static str {
+        match self {
+            GraphDirection::TopToBottom => "flex-col",
+            GraphDirection::LeftToRight => "flex-row",
+        }
+    }
+}
+
 /// Unified graph structure that can represent both top-level graphs and subgraphs
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Default)]
 pub struct GraphData {
     pub id: String,
     pub label: Option<String>,
@@ -14,6 +38,7 @@ pub struct GraphData {
     pub nodes: Vec<NodeData>,
     pub subgraphs: Vec<GraphData>, // Recursive structure
     pub edges: Vec<EdgeData>,      // Edges within this (sub)graph scope
+    pub direction: GraphDirection,
 }
 
 /// Owned representation of the node data
@@ -40,6 +65,7 @@ impl GraphData {
             nodes: Vec::new(),
             subgraphs: Vec::new(),
             edges: Vec::new(),
+            direction: find_graph_direction(&ast_graph.stmts),
         };
 
         // Parse statements to build the graph structure
@@ -56,8 +82,16 @@ impl GraphData {
             .iter()
             .map(|edge| {
                 // Get the actual node IDs as they exist in our structure
-                let source = node_id_map.get(&edge.from).unwrap_or(&edge.from).clone();
-                let target = node_id_map.get(&edge.to).unwrap_or(&edge.to).clone();
+                let source = node_id_map
+                    .get(&edge.from)
+                    .unwrap_or(&edge.from)
+                    .trim_matches('"')
+                    .to_string();
+                let target = node_id_map
+                    .get(&edge.to)
+                    .unwrap_or(&edge.to)
+                    .trim_matches('"')
+                    .to_string();
 
                 EdgeData {
                     id: format!("{}-{}", source, target),
@@ -81,40 +115,11 @@ impl GraphData {
     }
 }
 
-/// Parse DOT into Vec<EdgeData>
-///
-/// It is the caller's responsibility to ensure that the node id are unique
-pub fn parse_edges(dot: &str) -> Result<Vec<EdgeData>, String> {
+/// Parse DOT into GraphData
+pub fn parse_graph(dot: &str) -> Result<GraphData, String> {
     let ast_graph = dot_parser::ast::Graph::<(&str, &str)>::try_from(dot)
         .map_err(|err| format!("Failed to parse DOT: {}", err))?;
-    // Create canonical representation for edges
-    let canonical_graph = canonical::Graph::from(ast_graph.clone());
-
-    // Process edges from canonical representation
-    // All edges will be stored only at the top level
-    Ok(canonical_graph
-        .edges
-        .set
-        .iter()
-        .map(|edge| {
-            // Get the actual node IDs as they exist in our structure
-            let source = edge.from.trim_matches('"');
-            let target = edge.to.trim_matches('"');
-
-            EdgeData {
-                id: format!("{}-{}", source, target),
-                source: source.to_string(),
-                target: target.to_string(),
-                label: edge.attr.elems.iter().find_map(|(k, v)| {
-                    if *k == "label" {
-                        Some(v.trim_matches('"').to_string())
-                    } else {
-                        None
-                    }
-                }),
-            }
-        })
-        .collect())
+    Ok(GraphData::from_ast(&ast_graph))
 }
 
 // Find the graph label in statements
@@ -139,6 +144,39 @@ fn find_graph_label(stmts: &ast::StmtList<Att>) -> Option<String> {
         }
     }
     None
+}
+
+// Find the graph direction in statements
+fn find_graph_direction(stmts: &ast::StmtList<Att>) -> GraphDirection {
+    for stmt in stmts {
+        match stmt {
+            ast::Stmt::AttrStmt(ast::AttrStmt::Graph(attr_list)) => {
+                for element in &attr_list.elems {
+                    for elem in &element.elems {
+                        if elem.0 == "rankdir" {
+                            return match elem.1 {
+                                "LR" => GraphDirection::LeftToRight,
+                                _ => GraphDirection::TopToBottom,
+                            };
+                        }
+                    }
+                }
+            }
+            ast::Stmt::IDEq(key, value) => {
+                tracing::info!("STMT: {:?}, Key: {:?}", stmt, key);
+                if key == "rankdir" {
+                    tracing::info!("Value {:?}", value.as_str());
+                    let trimmed_value = value.as_str().trim_matches('"');
+                    return match trimmed_value {
+                        "LR" => GraphDirection::LeftToRight,
+                        _ => GraphDirection::TopToBottom,
+                    };
+                }
+            }
+            _ => {}
+        }
+    }
+    GraphDirection::default()
 }
 
 // Parse statements to build the graph structure
@@ -194,6 +232,8 @@ fn parse_statements(
                 let mut label = None;
                 let mut style = None;
                 extract_attributes(&subgraph.stmts, &mut label, &mut style);
+                let direction = find_graph_direction(&subgraph.stmts);
+                tracing::info!("direction: {:?}", direction);
 
                 // Create the subgraph
                 let mut sub_graph = GraphData {
@@ -203,6 +243,7 @@ fn parse_statements(
                     nodes: Vec::new(),
                     subgraphs: Vec::new(),
                     edges: Vec::new(), // No edges will be stored in subgraphs
+                    direction,
                 };
 
                 // Recursively parse the subgraph's contents

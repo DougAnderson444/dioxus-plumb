@@ -4,6 +4,7 @@ use dioxus_sdk::storage::use_persistent;
 mod examples;
 use examples::edge_arena::EdgeArenaExample;
 use examples::plog::PlogDiagram;
+use examples::plog_manual::PlogManual;
 use examples::workflow::WorkflowExample;
 
 const FAVICON: Asset = asset!("/assets/favicon.ico");
@@ -30,6 +31,7 @@ enum Example {
     ProjectWorkflow,
     EdgeArenaDemo,
     Plog,
+    PlogManual,
 }
 
 impl Example {
@@ -37,12 +39,14 @@ impl Example {
     const PROJECT_WORKFLOW_STR: &'static str = "Project Workflow (DOT)";
     const EDGE_ARENA_DEMO_STR: &'static str = "Edge Arena Demo";
     const PROVENANCE_LOG_STR: &'static str = "Provenance Log";
+    const PLOG_MANUAL: &'static str = "Provenance Log Manual";
 
     fn to_string(&self) -> &'static str {
         match self {
             Example::ProjectWorkflow => Self::PROJECT_WORKFLOW_STR,
             Example::EdgeArenaDemo => Self::EDGE_ARENA_DEMO_STR,
             Example::Plog => Self::PROVENANCE_LOG_STR,
+            Example::PlogManual => Self::PLOG_MANUAL,
         }
     }
 
@@ -52,6 +56,7 @@ impl Example {
             Self::PROJECT_WORKFLOW_STR => Some(Example::ProjectWorkflow),
             Self::EDGE_ARENA_DEMO_STR => Some(Example::EdgeArenaDemo),
             Self::PROVENANCE_LOG_STR => Some(Example::Plog),
+            Self::PLOG_MANUAL => Some(Example::PlogManual),
             _ => None,
         }
     }
@@ -62,6 +67,7 @@ impl Example {
             Example::ProjectWorkflow,
             Example::EdgeArenaDemo,
             Example::Plog,
+            Example::PlogManual,
         ]
     }
 }
@@ -115,7 +121,8 @@ fn MyGraphViewer() -> Element {
             match *selected_example.read() {
                 Example::ProjectWorkflow => rsx! { WorkflowExample {} },
                 Example::EdgeArenaDemo => rsx! { EdgeArenaExample {} },
-                Example::Plog => rsx! { PlogDiagram {} }
+                Example::Plog => rsx! { PlogDiagram {} },
+                Example::PlogManual => rsx! { PlogManual {} }
             }
         }
     }

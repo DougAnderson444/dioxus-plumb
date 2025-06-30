@@ -1,5 +1,5 @@
 //! Provenance Log Diagram
-//!╔═════════════════════════[ Provenance Log and VLAD ]══════════════════════════╗
+//! ╔═════════════════════════[ Provenance Log and VLAD ]══════════════════════════╗
 //! ║                                                                              ║
 //1 ║  ╭────────────────────────[Distributed Hash Table]────────────────────────╮  ║
 //! ║  │                                                                        │  ║
@@ -25,7 +25,11 @@
 //! ╚══════════════════════════════════════════════════════════════════════════════╝
 use dioxus::prelude::*;
 // Corrected import based on edge_arena.rs example and ls output
-use dioxus_plumb::{edge_renderer::EdgeArena, graph_data::parse_edges};
+use dioxus_plumb::{
+    edge_renderer::EdgeArena,
+    graph_data::{parse_graph, GraphData},
+};
+use std::str::FromStr;
 
 // Enum to categorize the different types of nodes in the provenance log diagram
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -37,12 +41,31 @@ enum PlogNodeType {
     Foot,
     Head,
     Cas,
+    Entries,
+}
+
+impl FromStr for PlogNodeType {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Dht" => Ok(PlogNodeType::Dht),
+            "Vlad" => Ok(PlogNodeType::Vlad),
+            "Wasm" => Ok(PlogNodeType::Wasm),
+            "MutableValue" => Ok(PlogNodeType::MutableValue),
+            "Foot" => Ok(PlogNodeType::Foot),
+            "Head" => Ok(PlogNodeType::Head),
+            "Cas" => Ok(PlogNodeType::Cas),
+            "Entries" => Ok(PlogNodeType::Entries),
+            _ => Err(()),
+        }
+    }
 }
 
 // Component to render individual nodes with specific styling based on their type
 #[component]
 fn PlogNodeRenderer(id: String, node_type: PlogNodeType, label: String) -> Element {
-    let mut base_classes = "border p-4 rounded-lg shadow-md w-48 text-center"; // Added fixed width and center text
+    let base_classes = "border p-4 rounded-lg shadow-md text-center"; // Removed w-48 for more flexible sizing
     let mut text_color = "text-gray-800";
     let mut bg_color = "bg-white";
 
@@ -76,6 +99,10 @@ fn PlogNodeRenderer(id: String, node_type: PlogNodeType, label: String) -> Eleme
             bg_color = "bg-gray-200";
             text_color = "text-gray-800";
         }
+        PlogNodeType::Entries => {
+            bg_color = "bg-purple-100";
+            text_color = "text-purple-800";
+        }
     }
 
     let classes = format!("{} {} {}", base_classes, bg_color, text_color);
@@ -86,7 +113,52 @@ fn PlogNodeRenderer(id: String, node_type: PlogNodeType, label: String) -> Eleme
             id: id.clone(),
             class: classes,
             // Display the label provided from the DOT definition.
-            h3 { class: "text-lg font-bold mb-2", "{label}" }
+            h3 {
+                class: "text-lg font-bold mb-2",
+                style: "white-space: pre-wrap;", // Handle newlines in labels
+                "{label}"
+            }
+        }
+    }
+}
+
+#[component]
+fn Graph(graph: GraphData) -> Element {
+    let direction_class = graph.direction.to_class();
+
+    rsx! {
+        div {
+            class: format!("border rounded-lg p-4 relative {}", direction_class),
+            if let Some(label) = &graph.label {
+                h3 {
+                    class: "absolute -top-3 left-1/2 -translate-x-1/2 bg-white px-2 text-lg font-bold",
+                    "{label}"
+                }
+            }
+            div {
+                class: format!("flex {} gap-8 pt-4", direction_class),
+
+                // Render nodes
+                {graph.nodes.iter().map(|node| {
+                    let node_type = PlogNodeType::from_str(node.label.as_deref().unwrap_or("")).unwrap_or(PlogNodeType::Cas);
+                    rsx! {
+                        PlogNodeRenderer {
+                            id: node.id.clone(),
+                            node_type: node_type,
+                            label: node.label.clone().unwrap_or_default(),
+                        }
+                    }
+                })}
+
+                // Render subgraphs
+                {graph.subgraphs.iter().map(|subgraph| {
+                    rsx! {
+                        Graph {
+                            graph: subgraph.clone()
+                        }
+                    }
+                })}
+            }
         }
     }
 }
@@ -95,74 +167,56 @@ fn PlogNodeRenderer(id: String, node_type: PlogNodeType, label: String) -> Eleme
 #[component]
 pub fn PlogDiagram() -> Element {
     // DOT graph definition describing the provenance log structure and relationships.
-    // We will parse only the edges from this string using parse_edges.
-    let dot_graph_edges_only = r#"
-        digraph ProvenanceLogEdges {
-            // Node IDs used in edges.
-            "dht"; "vlad"; "wasm"; "mutable_value"; "foot"; "head"; "cas";
+    let dot_graph = r#"
+        digraph ProvenanceLog {
+            rankdir="TB";
+            label="Provenance Log and VLAD";
 
-            // Edge definitions based on the diagram's arrows and labels, connecting the nodes.
-            // VLAD -> <WASM CID> -> <Mutable Value>
-            "vlad" -> "wasm" [label="<Sig of>\nmaps to\n<WASM CID>"]; // Combining labels for clarity on the relationship
-            "wasm" -> "mutable_value" [label="maps to"]; // The WASM code concept maps to the Mutable Value concept
+            subgraph cluster_dht {
+                label="Distributed Hash Table";
+                rankdir="LR";
+                vlad [label="VLAD", nodetype="Vlad"];
+                mutable_value [label="Mutable Value
+<CID>", nodetype="MutableValue"];
+            }
 
-            // References and Verifies links from the diagram.
-            "mutable_value" -> "cas" [label="references"]; // Mutable Value refers to content in CAS
-            "wasm" -> "cas" [label="references"];         // WASM module refers to content in CAS
+            subgraph cluster_cas {
+                label="Content Addressable Storage";
+                rankdir="LR";
+                wasm [label="WASM
+(module...)", nodetype="Wasm"];
+                subgraph cluster_entries {
+                    label="Entries";
+                    rankdir="LR";
+                    foot [label="Foot
+Seqno 0", nodetype="Foot"];
+                    head [label="Head
+Seqno 1", nodetype="Head"];
+                }
+            }
 
-            "wasm" -> "foot" [label="verifies"];         // WASM module verifies the Foot entry
-            "wasm" -> "head" [label="verifies"];         // WASM module verifies the Head entry
-
-            "foot" -> "cas" [label="verifies"];         // Foot entry verifies content in CAS
-            "head" -> "cas" [label="verifies"];         // Head entry verifies content in CAS
-
-            // DHT related connections, indicating how DHT indexes or relates to other components.
-            "dht" -> "vlad" [label="<WASM CID>"]; // DHT stores/indexes VLAD via WASM CID
-            "dht" -> "cas" [label="<CID>"];     // DHT stores/indexes CAS via CID
+            // Edge definitions based on the diagram's arrows and labels.
+            vlad -> mutable_value [label="maps to"];
+            vlad -> wasm [label="<Sig of>
+<WASM CID>"];
+            mutable_value -> head [label="references"];
+            wasm -> foot [label="verifies"];
+            wasm -> head [label="verifies"];
+            head -> foot [label="Prev"];
         }
     "#;
 
-    // Parse the DOT graph string to get only the edges.
-    // EdgeArena expects a list of edges.
-    let edges_data = parse_edges(dot_graph_edges_only).unwrap_or_default();
-
-    // Manually define the nodes and their properties, as EdgeArena renders child components for nodes.
-    // We extract this information from the original diagram's node definitions.
-    let nodes_data = vec![
-        ("dht", "Distributed Hash Table", PlogNodeType::Dht),
-        ("vlad", "VLAD", PlogNodeType::Vlad),
-        ("wasm", "WASM\n(module...)", PlogNodeType::Wasm),
-        (
-            "mutable_value",
-            "Mutable Value\n<CID>",
-            PlogNodeType::MutableValue,
-        ),
-        ("foot", "Foot\nSeqno 0", PlogNodeType::Foot),
-        ("head", "Head\nSeqno 1", PlogNodeType::Head),
-        ("cas", "Content Addressable Storage", PlogNodeType::Cas),
-    ];
+    let graph_data = parse_graph(dot_graph).unwrap_or_default();
 
     rsx! {
         div {
-            class: "mt-6 border border-gray-300 rounded-xl p-4",
-            h2 { class: "text-xl font-bold mb-4", "Provenance Log Diagram Demo" }
+            class: "mt-6 border border-gray-300 rounded-xl p-4 font-sans",
+            h2 { class: "text-xl font-bold mb-4 text-center", "{graph_data.label.clone().unwrap_or_default()}" }
 
-            // EdgeArena is the component that renders the graph layout.
             EdgeArena {
-                edges: edges_data, // Provide the parsed edges to EdgeArena.
-                div { // Container for the nodes. EdgeArena will position these based on edge data.
-                    class: "flex flex-wrap gap-8 justify-center", // Use flexbox for a responsive node layout.
-                    // Iterate over the manually defined node data and render a PlogNodeRenderer for each.
-                    // EdgeArena will match these components to the nodes specified in the edges by their 'id' prop.
-                    {nodes_data.iter().map(|(id, label, node_type)| {
-                        rsx! {
-                            PlogNodeRenderer {
-                                id: id.to_string(),       // Node ID required by EdgeArena.
-                                node_type: *node_type,  // Type for styling.
-                                label: label.to_string(), // Label to display within the node.
-                            }
-                        }
-                    })}
+                edges: graph_data.edges.clone(),
+                Graph {
+                    graph: graph_data
                 }
             }
         }

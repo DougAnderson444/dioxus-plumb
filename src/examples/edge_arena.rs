@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use dioxus_plumb::{edge_renderer::EdgeArena, graph_data::parse_edges};
+use dioxus_plumb::{edge_renderer::EdgeArena, graph_data::parse_graph};
 
 // Move the Basic component here as it's specific to this example
 #[component]
@@ -34,7 +34,7 @@ pub fn EdgeArenaExample() -> Element {
         node_b = node_b
     );
 
-    let edge_arena_edges = parse_edges(&edge_arena_dot_edges).unwrap_or_default();
+    let graph_data = parse_graph(&edge_arena_dot_edges).unwrap_or_default();
 
     rsx! {
         div {
@@ -43,7 +43,7 @@ pub fn EdgeArenaExample() -> Element {
 
              // EdgeArena is the container for the nodes and edges
              EdgeArena {
-                 edges: edge_arena_edges,
+                 edges: graph_data.edges,
                  div {
                      class: "flex flex-col gap-12",
                      "Describe the edges using DOT, but render nodes using Dioxus components",
