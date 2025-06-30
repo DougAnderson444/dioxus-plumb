@@ -52,7 +52,31 @@ fn Field(id: String, children: Element, code: Option<bool>) -> Element {
         div {
             id: id,
             class: "flex flex-col shadow-md {class} ",
-            {children}
+            if code.unwrap_or(false) {
+                GlowText {
+                    text: id.clone()
+                }
+            } else {
+                {children}
+            }
+        }
+    }
+}
+
+// Creates a glow around the given text
+#[component]
+fn GlowText(text: String) -> Element {
+    rsx! {
+        div {
+            class: "flex w-full items-center justify-center",
+            span {
+                class: "absolute mx-auto flex border w-fit bg-gradient-to-r blur-xl from-green-400 via-emerald-400 to-lime-500 bg-clip-text box-content font-extrabold text-transparent text-center select-none",
+                "{text}"
+            }
+            span {
+                class: "relative top-0 w-fit h-auto justify-center flex bg-gradient-to-r items-center from-green-400 via-emerald-400 to-green-400 bg-clip-text font-extrabold text-transparent text-center select-auto",
+                "{text}"
+            }
         }
     }
 }
@@ -223,7 +247,7 @@ pub fn PlogManual() -> Element {
                                             div {
                                                 class: "flex flex-col gap-4",
                                                 Field {
-                                                    id: "Unlock Script Head".to_string(),
+                                                    id: "Unlock Script".to_string(),
                                                     code: Some(true),
                                                     pre { class: "", "unlock script" }
                                                 },
