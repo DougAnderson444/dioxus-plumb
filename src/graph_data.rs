@@ -163,9 +163,7 @@ fn find_graph_direction(stmts: &ast::StmtList<Att>) -> GraphDirection {
                 }
             }
             ast::Stmt::IDEq(key, value) => {
-                tracing::info!("STMT: {:?}, Key: {:?}", stmt, key);
                 if key == "rankdir" {
-                    tracing::info!("Value {:?}", value.as_str());
                     let trimmed_value = value.as_str().trim_matches('"');
                     return match trimmed_value {
                         "LR" => GraphDirection::LeftToRight,

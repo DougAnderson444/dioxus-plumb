@@ -1,0 +1,61 @@
+name: github pages
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: cargo-bins/cargo-binstall@main
+
+      - name: Binstall dioxus-cli
+        run: cargo binstall --no-confirm dioxus-cli
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          
+      - name: Install Tailwind CSS
+        run: npm install -g tailwindcss@3.4.17
+
+      - name: Build CSS
+        run: tailwindcss -i ./tailwind.css -o ./assets/tailwind.css
+
+      - name: Build web app
+        run: dx bundle --out-dir docs
+
+      - name: Copy files to root ./docs directory
+        run: |
+          rm -rf docs
+          mkdir -p docs
+          cp -r docs/public/* docs/
+          cp docs/index.html docs/404.html
+          
+      - name: Upload static files as artifact
+        id: deployment
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/
+
+  deploy:
+    needs: build
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/configure-pages@v3
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+

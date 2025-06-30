@@ -63,7 +63,7 @@ fn Subgraph(title: String, id: String, children: Element) -> Element {
     rsx! {
         div {
             id: id,
-            class: "relative p-4 m-2 bg-slate-50 border-2 border-dotted border-slate-300 rounded-lg",
+            class: "relative p-6 m-2 bg-slate-50 border-2 border-dotted border-slate-300 rounded-lg",
             h3 { class: "absolute -top-3 left-4 px-2 bg-slate-50 text-sm font-bold", "{title}" },
             {children}
         }
@@ -100,6 +100,7 @@ pub fn PlogManual() -> Element {
     let first_lock = "First Lock CID";
     let vlad_pubkey = "Vlad Pubkey";
     let head_prev = "Head Prev";
+    let head_cid = "Head CID";
     // seqno 1
     let seqno_1 = "Seqno 1";
     let seqno_0 = "Seqno 0";
@@ -147,7 +148,7 @@ pub fn PlogManual() -> Element {
                             title: "Distributed Hash Table".to_string(),
                             id: "DHT".to_string(),
                             div {
-                                class: "flex flex-row gap-12 items-center justify-between",
+                                class: "flex flex-row gap-12 items-center justify-evenly",
                                 Subgraph {
                                     title: "VLAD".to_string(),
                                     id: vlad.to_string(),
@@ -163,10 +164,14 @@ pub fn PlogManual() -> Element {
                                         }
                                     }
                                 },
-                                Field {
+    // Subgraph is "Value"
+                                Subgraph {
+                                    title: "Mutable Value".to_string(),
                                     id: mutable_value.to_string(),
-                                    h2 { class: "text-lg", "Mutable Value" }
-                                    span { class: "font-mono", "CID of Head"}
+                                    Field {
+                                        id: head_cid.to_string(),
+                                        span { class: "font-mono", "CID of Head"}
+                                    }
                                 }
                             }
                         },
@@ -175,7 +180,7 @@ pub fn PlogManual() -> Element {
                             title: "Content Addressable Storage".to_string(),
                             id: "CAS".to_string(),
                             div {
-                                class: "flex flex-col justify-between gap-12 items-center",
+                                class: "flex flex-col justify-evenly gap-12 items-center",
                                 Field {
                                     id: first_lock_script.to_string(),
                                     code: Some(true),
@@ -186,7 +191,7 @@ pub fn PlogManual() -> Element {
                                     title: "Entries".to_string(),
                                     id: "Entries".to_string(),
                                     div {
-                                        class: "flex flex-row justify-between gap-12",
+                                        class: "flex flex-row justify-evenly gap-12",
                                         // Foot is subgraph too
                                         Subgraph {
                                             title: "Foot".to_string(),
