@@ -33,10 +33,10 @@ impl Default for ArrowOptions {
     /// straights = true,
     fn default() -> Self {
         ArrowOptions {
-            bow: 0.01,
+            bow: 0.0,
             stretch: 0.25,
             stretch_min: 50.0,
-            stretch_max: 420.0,
+            stretch_max: 800.0,
             pad_start: 0.0,
             pad_end: 0.0,
             flip: false,

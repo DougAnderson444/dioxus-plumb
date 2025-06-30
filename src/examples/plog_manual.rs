@@ -34,7 +34,7 @@ fn Basic(id: String, children: Element) -> Element {
         div {
             id,
             class: "h-fit p-4 bg-slate-300/60 rounded-lg",
-            h2 { class: "text-xl font-semibold", "{id}" }
+            h2 { class: "font-semibold", "{id}" }
             {children}
         }
     }
@@ -42,11 +42,16 @@ fn Basic(id: String, children: Element) -> Element {
 
 /// Smaller component for fields in a Nasic node
 #[component]
-fn Field(id: String, children: Element) -> Element {
+fn Field(id: String, children: Element, code: Option<bool>) -> Element {
+    let class = if code.unwrap_or(false) {
+        "p-2 text-sm font-mono bg-neutral-700 text-green-400 rounded-md"
+    } else {
+        "gap-2 p-2 border-2 bg-slate-50 border-slate-300 rounded-lg"
+    };
     rsx! {
         div {
             id: id,
-            class: "flex flex-col gap-2 p-2 border-2",
+            class: "flex flex-col shadow-md {class} ",
             {children}
         }
     }
@@ -92,8 +97,12 @@ pub fn PlogManual() -> Element {
     let head = "Head";
     let foot = "Foot";
     let first_lock_script = "First Lock Script";
+    let first_lock = "First Lock CID";
     let vlad_pubkey = "Vlad Pubkey";
     let head_prev = "Head Prev";
+    // seqno 1
+    let seqno_1 = "Seqno 1";
+    let seqno_0 = "Seqno 0";
 
     let edge_arena_dot_edges = format!(
         r#"
@@ -109,6 +118,8 @@ pub fn PlogManual() -> Element {
             "{mutable_value}" -> "{head}" [label="References"];
             "{vlad_pubkey}" -> "{vlad_sig}" [label="Verifies"];
             "{head_prev}" -> "{foot}";
+            "{first_lock}" -> "{first_lock_script}" [label="References"];
+            "{seqno_0}" -> "{seqno_1}" [label="then"];
         }}
         "#,
     );
@@ -117,8 +128,8 @@ pub fn PlogManual() -> Element {
 
     rsx! {
         div {
-             class: "mt-6 border border-gray-300 rounded-xl p-4",
-             h2 { class: "text-xl font-bold mb-4", "Edge Arena Demo" }
+             class: "mt-6 border border-gray-300 rounded-lg p-4",
+             h2 { class: "text-lg font-bold mb-4", "Edge Arena Demo" }
 
              // EdgeArena is the container for the nodes and edges
              EdgeArena {
@@ -136,7 +147,7 @@ pub fn PlogManual() -> Element {
                             title: "Distributed Hash Table".to_string(),
                             id: "DHT".to_string(),
                             div {
-                                class: "flex flex-row gap-12 items-center",
+                                class: "flex flex-row gap-12 items-center justify-between",
                                 Subgraph {
                                     title: "VLAD".to_string(),
                                     id: vlad.to_string(),
@@ -144,17 +155,18 @@ pub fn PlogManual() -> Element {
                                         class: "flex flex-row gap-12",
                                         Field {
                                             id: vlad_sig.to_string(),
-                                            h2 { class: "text-xl", "Signature" }
+                                            span { class: "", "Signature" }
                                         },
                                         Field {
                                             id: wasm_cid.to_string(),
-                                            h2 { class: "text-xl", "WASM CID" }
+                                            { wasm_cid }
                                         }
                                     }
                                 },
                                 Field {
                                     id: mutable_value.to_string(),
-                                    h2 { class: "text-xl", "Mutable Value" }
+                                    h2 { class: "text-lg", "Mutable Value" }
+                                    span { class: "font-mono", "CID of Head"}
                                 }
                             }
                         },
@@ -166,7 +178,8 @@ pub fn PlogManual() -> Element {
                                 class: "flex flex-col justify-between gap-12 items-center",
                                 Field {
                                     id: first_lock_script.to_string(),
-                                    h2 { class: "p-2 font-mono bg-neutral-700 text-green-400 rounded-md", "First Lock Script" }
+                                    code: Some(true),
+                                    "First Lock Script"
                                 }
                                 // Head and Foot are Entries subgrah
                                 Subgraph {
@@ -181,7 +194,11 @@ pub fn PlogManual() -> Element {
                                             div {
                                                 class: "flex flex-col gap-4",
                                                 Field {
-                                                    id: "Seqno 0".to_string(),
+                                                    id: first_lock.to_string(),
+                                                    "First Lock CID",
+                                                },
+                                                Field {
+                                                    id: seqno_0.to_string(),
                                                     "Seqno 0",
                                                 },
                                                 Field {
@@ -201,12 +218,21 @@ pub fn PlogManual() -> Element {
                                             div {
                                                 class: "flex flex-col gap-4",
                                                 Field {
-                                                    id: "Seqno 1".to_string(),
+                                                    id: "Unlock Script Head".to_string(),
+                                                    code: Some(true),
+                                                    pre { class: "", "unlock script" }
+                                                },
+                                                Field {
+                                                    id: seqno_1.to_string(),
                                                     "Seqno 1",
                                                 },
                                                 Field {
                                                     id: head_prev.to_string(),
                                                     "Prev",
+                                                }
+                                                Field {
+                                                    id: "Key Values".to_string(),
+                                                    "Key Value Pairs",
                                                 }
                                             }
                                         }
