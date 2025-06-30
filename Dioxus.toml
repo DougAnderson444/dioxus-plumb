@@ -1,9 +1,10 @@
 [application]
 
 [web.app]
+base_path = "dioxus-plumb"
 
 # HTML title tag content
-title = "Dioxus Plumb"
+title = "Drawn Systems in Dioxus"
 
 # include `assets` in web platform
 [web.resource]
