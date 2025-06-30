@@ -75,10 +75,8 @@ impl Example {
 /// Component to view different graph examples
 #[component]
 fn MyGraphViewer() -> Element {
-    // Use the use_local_storage hook instead of use_state
-    // It takes the storage key and a default value factory
     let mut selected_example =
-        use_persistent::<Example>("selected_graph_example", || Example::ProjectWorkflow);
+        use_persistent::<Example>("selected_graph_example", || Example::PlogManual);
 
     rsx! {
         div {
@@ -95,26 +93,18 @@ fn MyGraphViewer() -> Element {
                 select {
                     id: "example-select",
                     class: "shadow appearance-none border rounded w-full p-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline",
-                    value: selected_example.read().to_string(),
                     onchange: move |event| {
-                         let value = event.value();
-
-                        tracing::info!("Selected: {:?}", value);
-
-                         if let Some(example) = Example::from_string(&value) {
-                             tracing::info!("Setting example to {:?}", example);
-                             selected_example.set(example);
-                         } else {
-                            tracing::warn!("Unknown example selected: {}", value);
-                         }
+                        let value = event.value();
+                        if let Some(example) = Example::from_string(&value) {
+                            selected_example.set(example);
+                        }
                     },
                     { Example::all_variants().into_iter().map(|ex| {
                         let s = ex.to_string();
                         rsx! {
-                            option { value: s, "{s}" }
+                            option { value: s, selected: *selected_example.read() == ex, "{s}" }
                         }
                     }) }
-
                 }
             }
 

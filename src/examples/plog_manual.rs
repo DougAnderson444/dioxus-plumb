@@ -128,6 +128,7 @@ pub fn PlogManual() -> Element {
     // seqno 1
     let seqno_1 = "Seqno 1";
     let seqno_0 = "Seqno 0";
+    let unlock_script = "Unlock Script";
 
     let edge_arena_dot_edges = format!(
         r#"
@@ -139,12 +140,14 @@ pub fn PlogManual() -> Element {
             "{wasm_cid}" -> "{first_lock_script}" [label="Identifies Content of"];
             "{vlad_sig}" -> "{wasm_cid}" [label="of"];
             "{vlad}" -> "{mutable_value}" [label="Maps to"];
-            "{first_lock_script}" -> "{foot}" [label="Verifies"];
+            "{first_lock_script}" -> "{foot}" [label="Secures"];
             "{mutable_value}" -> "{head}" [label="References"];
             "{vlad_pubkey}" -> "{vlad_sig}" [label="Verifies"];
             "{head_prev}" -> "{foot}";
             "{first_lock}" -> "{first_lock_script}" [label="References"];
             "{seqno_0}" -> "{seqno_1}" [label="then"];
+            // unlock script to head enables changes 
+            "{unlock_script}" -> "{head}" [label="Unlocks"];
         }}
         "#,
     );
@@ -245,11 +248,11 @@ pub fn PlogManual() -> Element {
                                             title: "Head".to_string(),
                                             id: head.to_string(),
                                             div {
-                                                class: "flex flex-col gap-4",
+                                                class: "flex flex-col gap-4 pt-4",
                                                 Field {
-                                                    id: "Unlock Script".to_string(),
+                                                    id: unlock_script.to_string(),
                                                     code: Some(true),
-                                                    pre { class: "", "unlock script" }
+                                                    pre { class: "mt-4 pt-2", {unlock_script} }
                                                 },
                                                 Field {
                                                     id: seqno_1.to_string(),

@@ -96,7 +96,7 @@ pub fn EdgeRenderer(edge: EdgeData) -> Element {
                 "stroke-width": "4",
                 class: "edge",
                 style: "transition: stroke 0.2s ease; pointer-events: stroke;",
-                "stroke-opacity": "0.5"
+                "stroke-opacity": "0.4"
             }
             polygon {
                 points: "-8,-6 0,0 -8,6",
@@ -116,12 +116,13 @@ pub fn EdgeRenderer(edge: EdgeData) -> Element {
                     rx: "5",
                     ry: "5",
                     fill: "white",
-                    opacity: "0.8"
+                    opacity: "0.5"
                 }
                 text {
                     x: "{data.label_x}",
                     y: "{data.label_y}",
-                    fill: "#4b5563",
+                    opacity: "0.5",
+                    fill: "#444444",
                     "font-size": "12px",
                     "text-anchor": "middle",
                     "dy": "0.3em",
