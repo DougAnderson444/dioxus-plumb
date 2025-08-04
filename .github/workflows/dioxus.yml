@@ -24,7 +24,7 @@ jobs:
       - name: Install npm dependencies for CI 
         run: | 
           npm ci --verbose
-          npm install -g tailwindcss
+          npm install -g @tailwindcss/cli
 
       - name: Build CSS
         run: tailwindcss -i ./tailwind.css -o ./assets/tailwind.css
