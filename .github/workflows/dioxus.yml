@@ -28,7 +28,7 @@ jobs:
         run: tailwindcss -i ./tailwind.css -o ./assets/tailwind.css
 
       - name: Build web app
-        run: dx bundle --out-dir docs --base-path "${{ github.repository#*/ }}"
+        run: dx bundle --out-dir docs --base-path "${{ github.repository | split("/") | last }}"
 
       - name: Copy files to root ./docs directory
         run: |
