@@ -21,14 +21,14 @@ jobs:
         with:
           node-version: '18'
           
-      - name: Install Tailwind CSS
-        run: npm install -g tailwindcss@3.4.17
+      - name: Install npm dependencies for CI 
+        run: npm ci
 
       - name: Build CSS
         run: tailwindcss -i ./tailwind.css -o ./assets/tailwind.css
 
       - name: Build web app
-        run: dx bundle --out-dir docs
+        run: dx bundle --out-dir docs --base-path "${{ github.repository#*/ }}"
 
       - name: Copy files to root ./docs directory
         run: |
