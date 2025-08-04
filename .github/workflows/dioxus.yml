@@ -25,7 +25,7 @@ jobs:
         run: npm ci --verbose
 
       - name: Build CSS
-        run: npx tailwindcss -i ./tailwind.css -o ./assets/tailwind.css
+        run: tailwindcss -i ./tailwind.css -o ./assets/tailwind.css
 
       - name: Build web app
         run: dx bundle --out-dir docs --base-path "${{ github.event.repository.name }}"
