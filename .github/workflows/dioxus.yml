@@ -23,11 +23,10 @@ jobs:
           
       - name: Install npm dependencies for CI 
         run: | 
-          npm ci --verbose
-          npm install -g @tailwindcss/cli
+          npm ci
 
       - name: Build CSS
-        run: tailwindcss -i ./tailwind.css -o ./assets/tailwind.css
+        run: npx @tailwindcss/cli -i ./tailwind.css -o ./assets/tailwind.css
 
       - name: Build web app
         run: dx bundle --out-dir docs --base-path "${{ github.event.repository.name }}"
