@@ -22,7 +22,9 @@ jobs:
           node-version: '18'
           
       - name: Install npm dependencies for CI 
-        run: npm ci --verbose
+        run: | 
+          npm ci --verbose
+          npm install -g tailwindcss
 
       - name: Build CSS
         run: tailwindcss -i ./tailwind.css -o ./assets/tailwind.css
