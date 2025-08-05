@@ -1,33 +1,10 @@
 use dioxus::logger::tracing;
 use dot_parser::{ast, canonical};
-use std::collections::HashMap;
+use std::{collections::HashMap, str::FromStr as _};
 
-use crate::edge_renderer::EdgeData;
+use crate::{edge_renderer::EdgeData, rankdir::RankDir};
 
 type Att<'a> = (&'a str, &'a str);
-
-/// Represents the direction of the graph layout.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum GraphDirection {
-    TopToBottom,
-    LeftToRight,
-}
-
-impl Default for GraphDirection {
-    fn default() -> Self {
-        Self::TopToBottom
-    }
-}
-
-impl GraphDirection {
-    /// Returns the Tailwind CSS class corresponding to the graph direction.
-    pub fn to_class(&self) -> &'static str {
-        match self {
-            GraphDirection::TopToBottom => "flex-col",
-            GraphDirection::LeftToRight => "flex-row",
-        }
-    }
-}
 
 /// Unified graph structure that can represent both top-level graphs and subgraphs
 #[derive(Clone, Debug, PartialEq, Default)]
@@ -38,7 +15,7 @@ pub struct GraphData {
     pub nodes: Vec<NodeData>,
     pub subgraphs: Vec<GraphData>, // Recursive structure
     pub edges: Vec<EdgeData>,      // Edges within this (sub)graph scope
-    pub direction: GraphDirection,
+    pub direction: RankDir,
 }
 
 /// Owned representation of the node data
@@ -147,34 +124,27 @@ fn find_graph_label(stmts: &ast::StmtList<Att>) -> Option<String> {
 }
 
 // Find the graph direction in statements
-fn find_graph_direction(stmts: &ast::StmtList<Att>) -> GraphDirection {
+fn find_graph_direction(stmts: &ast::StmtList<Att>) -> RankDir {
     for stmt in stmts {
         match stmt {
             ast::Stmt::AttrStmt(ast::AttrStmt::Graph(attr_list)) => {
                 for element in &attr_list.elems {
                     for elem in &element.elems {
                         if elem.0 == "rankdir" {
-                            return match elem.1 {
-                                "LR" => GraphDirection::LeftToRight,
-                                _ => GraphDirection::TopToBottom,
-                            };
+                            return RankDir::from_slice(elem.1);
                         }
                     }
                 }
             }
             ast::Stmt::IDEq(key, value) => {
                 if key == "rankdir" {
-                    let trimmed_value = value.as_str().trim_matches('"');
-                    return match trimmed_value {
-                        "LR" => GraphDirection::LeftToRight,
-                        _ => GraphDirection::TopToBottom,
-                    };
+                    return RankDir::from_slice(value);
                 }
             }
             _ => {}
         }
     }
-    GraphDirection::default()
+    RankDir::default()
 }
 
 // Parse statements to build the graph structure
@@ -229,8 +199,8 @@ fn parse_statements(
                 // Extract subgraph attributes
                 let mut label = None;
                 let mut style = None;
-                extract_attributes(&subgraph.stmts, &mut label, &mut style);
                 let direction = find_graph_direction(&subgraph.stmts);
+                extract_attributes(&subgraph.stmts, &mut label, &mut style);
                 tracing::info!("direction: {:?}", direction);
 
                 // Create the subgraph

@@ -11,9 +11,11 @@ pub fn WorkflowExample() -> Element {
             subgraph cluster_0 {
                 label="Planning & Development";
                 style="dashed";
+                rankdir="LR";
 
                 subgraph cluster_0_1 {
                     label="Initial Planning";
+                    rankdir="TB";
                     style="dotted";
                     start [label="Start Project"];
                     requirements [label="Requirements"];
@@ -30,6 +32,7 @@ pub fn WorkflowExample() -> Element {
 
             subgraph cluster_1 {
                 label="Quality & Delivery";
+                rankdir="LR";
                 style="dashed";
 
                 subgraph cluster_1_1 {

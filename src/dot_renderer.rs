@@ -70,9 +70,11 @@ fn render_graph_content<R: DotNodeRenderer + PartialEq>(
     graph: &GraphData,
     renderer: &R,
 ) -> Element {
+    let direction_class = graph.direction.flex_class();
+
     rsx! {
         div {
-            class: "flex flex-col gap-6",
+            class: "flex {direction_class} gap-6",
 
             // Render subgraphs recursively
             {graph.subgraphs.iter().map(|subgraph| {
@@ -103,22 +105,17 @@ fn render_graph_content<R: DotNodeRenderer + PartialEq>(
             })}
 
             // Render nodes in this graph level
-            if !graph.nodes.is_empty() {
-                div {
-                    class: "flex flex-row flex-wrap items-center gap-4 justify-start",
-                    {graph.nodes.iter().map(|node| {
-                        rsx! {
-                            div {
-                                id: "{node.id}",
-                                "data-node": "true",
-                                {renderer.render_node(node)}
-                            }
-                        }
-                    })}
+            {graph.nodes.iter().map(|node| {
+                rsx! {
+                    div {
+                        id: "{node.id}",
+                        "data-node": "true",
+                        {renderer.render_node(node)}
+                    }
                 }
-            }
-
-            // NO edge rendering here - all edges are rendered at the top level
+            })}
         }
+
+        // NO edge rendering here - all edges are rendered at the top level
     }
 }

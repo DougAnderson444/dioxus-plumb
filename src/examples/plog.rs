@@ -124,7 +124,7 @@ fn PlogNodeRenderer(id: String, node_type: PlogNodeType, label: String) -> Eleme
 
 #[component]
 fn Graph(graph: GraphData) -> Element {
-    let direction_class = graph.direction.to_class();
+    let direction_class = graph.direction.flex_class();
 
     rsx! {
         div {
@@ -187,7 +187,7 @@ pub fn PlogDiagram() -> Element {
 (module...)", nodetype="Wasm"];
                 subgraph cluster_entries {
                     label="Entries";
-                    rankdir="LR";
+                    rankdir="TB";
                     foot [label="Foot
 Seqno 0", nodetype="Foot"];
                     head [label="Head

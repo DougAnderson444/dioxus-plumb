@@ -1,7 +1,8 @@
 /// RankDir represents the direction of graph layout.
 /// It corresponds to the 'rankdir' attribute in DOT language.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) enum RankDir {
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum RankDir {
+    #[default]
     TB, // Top to Bottom (default)
     LR, // Left to Right
     BT, // Bottom to Top
@@ -10,7 +11,7 @@ pub(crate) enum RankDir {
 
 impl RankDir {
     // Associated constants for CSS classes
-    pub(crate) const fn flex_class(self) -> &'static str {
+    pub const fn flex_class(self) -> &'static str {
         match self {
             RankDir::TB => "flex-col",
             RankDir::LR => "flex-row",
@@ -19,8 +20,8 @@ impl RankDir {
         }
     }
 
-    // Parse from string
-    pub(crate) fn from_str(s: &str) -> Self {
+    // Parse from string slice
+    pub fn from_slice(s: &str) -> Self {
         match s.trim_matches('"') {
             "LR" => RankDir::LR,
             "BT" => RankDir::BT,
