@@ -1,3 +1,5 @@
+/// RankDir represents the direction of graph layout.
+/// It corresponds to the 'rankdir' attribute in DOT language.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum RankDir {
     TB, // Top to Bottom (default)

@@ -118,7 +118,7 @@ impl GraphData {
 /// Parse DOT into GraphData
 pub fn parse_graph(dot: &str) -> Result<GraphData, String> {
     let ast_graph = dot_parser::ast::Graph::<(&str, &str)>::try_from(dot)
-        .map_err(|err| format!("Failed to parse DOT: {}", err))?;
+        .map_err(|err| format!("Failed to parse DOT: {err}"))?;
     Ok(GraphData::from_ast(&ast_graph))
 }
 

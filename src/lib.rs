@@ -4,3 +4,4 @@ pub mod edge_renderer;
 pub mod graph_data;
 pub mod node_renderer;
 pub mod perfect_arrows;
+pub mod rankdir;

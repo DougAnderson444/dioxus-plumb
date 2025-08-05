@@ -1,4 +1,4 @@
-use dioxus::prelude::*;
+use dioxus::{logger::tracing, prelude::*};
 use dioxus_plumb::{dot_renderer::DotGraph, node_renderer::InteractiveNodeRenderer};
 
 #[component]
@@ -66,8 +66,7 @@ pub fn WorkflowExample() -> Element {
     // Create an interactive renderer with click handler for DotGraph
     let dot_renderer_config = InteractiveNodeRenderer {
         on_node_click: Some(EventHandler::new(|node_id| {
-            println!("Node clicked: {}", node_id);
-            // Handle node click, maybe open a detail panel
+            tracing::info!("Node clicked: {node_id}");
         })),
     };
 
