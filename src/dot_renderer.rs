@@ -13,7 +13,7 @@ pub trait DotNodeRenderer {
 
 /// Props for the DotGraph component
 #[derive(Clone, Props, PartialEq)]
-pub struct DotGraphProps<R: DotNodeRenderer + PartialEq + 'static> {
+pub struct DotGraphProps<R: DotNodeRenderer + Clone + PartialEq + 'static> {
     /// The DOT content to render
     pub dot: String,
 
@@ -27,7 +27,9 @@ pub struct DotGraphProps<R: DotNodeRenderer + PartialEq + 'static> {
 
 /// Component to render a DOT graph with custom node rendering
 #[component]
-pub fn DotGraph<R: DotNodeRenderer + PartialEq + 'static>(props: DotGraphProps<R>) -> Element {
+pub fn DotGraph<R: DotNodeRenderer + Clone + PartialEq + 'static>(
+    props: DotGraphProps<R>,
+) -> Element {
     // Parse the DOT string
     let graph_result = dot_parser::ast::Graph::<(&str, &str)>::try_from(props.dot.as_str());
 
@@ -59,63 +61,100 @@ pub fn DotGraph<R: DotNodeRenderer + PartialEq + 'static>(props: DotGraphProps<R
 
             EdgeArena {
                 edges: graph.edges.clone(),
-                children: render_graph_content(&graph, &props.renderer)
+                GraphContent {
+                    graph: graph,
+                    renderer: props.renderer.clone()
+                }
             }
         }
     }
 }
 
-/// Helper function to recursively render graph content WITHOUT edges
-fn render_graph_content<R: DotNodeRenderer + PartialEq>(
-    graph: &GraphData,
-    renderer: &R,
-) -> Element {
-    let direction_class = graph.direction.flex_class();
+#[derive(Clone, Props, PartialEq)]
+struct GraphContentProps<R: DotNodeRenderer + Clone + PartialEq + 'static> {
+    graph: GraphData,
+    renderer: R,
+}
 
+/// Helper component to recursively render graph content
+#[component]
+fn GraphContent<R: DotNodeRenderer + Clone + PartialEq + 'static>(
+    props: GraphContentProps<R>,
+) -> Element {
+    let mut is_collapsed = use_signal(|| false);
+    let direction_class = props.graph.direction.flex_class();
+
+    let toggle_collapse = move |_| {
+        is_collapsed.toggle();
+    };
+
+    let style_class = match props.graph.style.as_deref() {
+        Some("dashed") => "border-dashed",
+        Some("dotted") => "border-dotted",
+        _ => "border-solid",
+    };
+
+    let container_class = if props.graph.id.starts_with("cluster_") {
+        let base_class =
+            "relative p-4 m-2 bg-slate-50 border-2 {style_class} border-slate-300 rounded-lg";
+        if is_collapsed() {
+            format!("{} h-fit w-fit", base_class)
+        } else {
+            base_class.to_string()
+        }
+    } else {
+        "".to_string()
+    };
+
+    // Main container for the graph or subgraph
     rsx! {
         div {
-            class: "flex {direction_class} gap-6",
+            id: "{props.graph.id}",
+            class: "{container_class}",
+            "data-subgraph": if props.graph.id.starts_with("cluster_") { "true" } else { "false" },
 
-            // Render subgraphs recursively
-            {graph.subgraphs.iter().map(|subgraph| {
-                let style_class = match subgraph.style.as_deref() {
-                    Some("dashed") => "border-dashed",
-                    Some("dotted") => "border-dotted",
-                    _ => "border-solid",
-                };
-
-                rsx! {
+            // Clickable label for collapsing/expanding subgraphs
+            if let Some(label) = &props.graph.label {
+                if props.graph.id.starts_with("cluster_") {
                     div {
-                        id: "{subgraph.id}",
-                        class: "relative p-4 m-2 bg-slate-50 border-2 {style_class} border-slate-300 rounded-lg",
-                        "data-subgraph": "true",
+                        class: "absolute -top-3 left-4 px-2 bg-slate-50 text-sm font-bold cursor-pointer select-none",
+                        onclick: toggle_collapse,
+                        "{label}",
+                        span {
+                            class: "mr-2",
+                            if is_collapsed() { " [+] " } else { " [-] " }
+                        }
+                    }
+                }
+            }
 
-                        // Subgraph label
-                        if let Some(label) = &subgraph.label {
-                            div {
-                                class: "absolute -top-3 left-4 px-2 bg-slate-50 text-sm font-bold",
-                                "{label}"
+            // Conditionally render children
+            if !is_collapsed() {
+                div {
+                    class: "flex {direction_class} gap-6 pt-4",
+
+                    // Render subgraphs recursively
+                    {props.graph.subgraphs.iter().map(|subgraph| {
+                        rsx! {
+                            GraphContent {
+                                graph: subgraph.clone(),
+                                renderer: props.renderer.clone()
                             }
                         }
+                    })}
 
-                        // Recursively render the subgraph's content
-                        {render_graph_content(subgraph, renderer)}
-                    }
+                    // Render nodes in this graph level
+                    {props.graph.nodes.iter().map(|node| {
+                        rsx! {
+                            div {
+                                id: "{node.id}",
+                                "data-node": "true",
+                                {props.renderer.render_node(node)}
+                            }
+                        }
+                    })}
                 }
-            })}
-
-            // Render nodes in this graph level
-            {graph.nodes.iter().map(|node| {
-                rsx! {
-                    div {
-                        id: "{node.id}",
-                        "data-node": "true",
-                        {renderer.render_node(node)}
-                    }
-                }
-            })}
+            }
         }
-
-        // NO edge rendering here - all edges are rendered at the top level
     }
 }

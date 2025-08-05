@@ -2,6 +2,7 @@ use dioxus::{logger::tracing, prelude::*};
 use dioxus_sdk::storage::use_persistent;
 
 mod examples;
+use examples::dashboard::Dashboard;
 use examples::edge_arena::EdgeArenaExample;
 use examples::plog::PlogDiagram;
 use examples::plog_manual::PlogManual;
@@ -32,6 +33,7 @@ enum Example {
     EdgeArenaDemo,
     Plog,
     PlogManual,
+    Dashboard,
 }
 
 impl Example {
@@ -40,6 +42,7 @@ impl Example {
     const EDGE_ARENA_DEMO_STR: &'static str = "Edge Arena Demo";
     const PROVENANCE_LOG_STR: &'static str = "Provenance Log";
     const PLOG_MANUAL: &'static str = "Provenance Log Manual";
+    const DASHBOARD: &'static str = "Dashboard";
 
     fn to_string(&self) -> &'static str {
         match self {
@@ -47,6 +50,7 @@ impl Example {
             Example::EdgeArenaDemo => Self::EDGE_ARENA_DEMO_STR,
             Example::Plog => Self::PROVENANCE_LOG_STR,
             Example::PlogManual => Self::PLOG_MANUAL,
+            Example::Dashboard => Self::DASHBOARD,
         }
     }
 
@@ -57,6 +61,7 @@ impl Example {
             Self::EDGE_ARENA_DEMO_STR => Some(Example::EdgeArenaDemo),
             Self::PROVENANCE_LOG_STR => Some(Example::Plog),
             Self::PLOG_MANUAL => Some(Example::PlogManual),
+            Self::DASHBOARD => Some(Example::Dashboard),
             _ => None,
         }
     }
@@ -68,6 +73,7 @@ impl Example {
             Example::EdgeArenaDemo,
             Example::Plog,
             Example::PlogManual,
+            Example::Dashboard,
         ]
     }
 }
@@ -112,7 +118,8 @@ fn MyGraphViewer() -> Element {
                 Example::ProjectWorkflow => rsx! { WorkflowExample {} },
                 Example::EdgeArenaDemo => rsx! { EdgeArenaExample {} },
                 Example::Plog => rsx! { PlogDiagram {} },
-                Example::PlogManual => rsx! { PlogManual {} }
+                Example::PlogManual => rsx! { PlogManual {} },
+                Example::Dashboard => rsx! { Dashboard {} },
             }
         }
     }

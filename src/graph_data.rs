@@ -1,9 +1,11 @@
-use dioxus::logger::tracing;
 use dot_parser::{ast, canonical};
-use std::{collections::HashMap, str::FromStr as _};
+use std::collections::HashMap;
 
 use crate::{edge_renderer::EdgeData, rankdir::RankDir};
 
+/// Type alias for attributes in the AST
+/// This is used to represent key-value pairs in the AST, where both key and value are
+/// string slices.
 type Att<'a> = (&'a str, &'a str);
 
 /// Unified graph structure that can represent both top-level graphs and subgraphs
@@ -71,7 +73,7 @@ impl GraphData {
                     .to_string();
 
                 EdgeData {
-                    id: format!("{}-{}", source, target),
+                    id: format!("{source}-{target}"),
                     source,
                     target,
                     label: edge.attr.elems.iter().find_map(|(k, v)| {
@@ -164,7 +166,7 @@ fn parse_statements(
                 let node_id = if path_prefix.is_empty() {
                     original_id.clone()
                 } else {
-                    format!("{}-{}", path_prefix, original_id)
+                    format!("{path_prefix}-{original_id}")
                 };
 
                 // Map the original ID to our node ID
@@ -193,7 +195,7 @@ fn parse_statements(
                 let new_path_prefix = if path_prefix.is_empty() {
                     subgraph_id.clone()
                 } else {
-                    format!("{}-{}", path_prefix, subgraph_id)
+                    format!("{path_prefix}-{subgraph_id}")
                 };
 
                 // Extract subgraph attributes
@@ -201,7 +203,6 @@ fn parse_statements(
                 let mut style = None;
                 let direction = find_graph_direction(&subgraph.stmts);
                 extract_attributes(&subgraph.stmts, &mut label, &mut style);
-                tracing::info!("direction: {:?}", direction);
 
                 // Create the subgraph
                 let mut sub_graph = GraphData {
