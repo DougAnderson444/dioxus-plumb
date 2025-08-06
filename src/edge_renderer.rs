@@ -73,7 +73,7 @@ pub fn EdgeRenderer(edge: EdgeData) -> Element {
         generate_arrow_path_safe(&edge_clone)
             .map(|data| svg_data.set(Some(data)))
             .unwrap_or_else(|err| {
-                tracing::error!("Error calculating edge {}: {}", edge_clone.id, err);
+                // tracing::error!("Error calculating edge {}: {}", edge_clone.id, err);
                 svg_data.set(None);
             });
     });

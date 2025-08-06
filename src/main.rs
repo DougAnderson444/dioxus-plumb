@@ -3,6 +3,7 @@ use dioxus_sdk::storage::use_persistent;
 
 mod examples;
 use examples::dashboard::Dashboard;
+use examples::dot_repl::DotRepl;
 use examples::edge_arena::EdgeArenaExample;
 use examples::plog::PlogDiagram;
 use examples::plog_manual::PlogManual;
@@ -34,6 +35,7 @@ enum Example {
     Plog,
     PlogManual,
     Dashboard,
+    DotRepl,
 }
 
 impl Example {
@@ -43,6 +45,7 @@ impl Example {
     const PROVENANCE_LOG_STR: &'static str = "Provenance Log";
     const PLOG_MANUAL: &'static str = "Provenance Log Manual";
     const DASHBOARD: &'static str = "Dashboard";
+    const DOT_REPL: &'static str = "DOT REPL";
 
     fn to_string(&self) -> &'static str {
         match self {
@@ -51,6 +54,7 @@ impl Example {
             Example::Plog => Self::PROVENANCE_LOG_STR,
             Example::PlogManual => Self::PLOG_MANUAL,
             Example::Dashboard => Self::DASHBOARD,
+            Example::DotRepl => Self::DOT_REPL,
         }
     }
 
@@ -62,6 +66,7 @@ impl Example {
             Self::PROVENANCE_LOG_STR => Some(Example::Plog),
             Self::PLOG_MANUAL => Some(Example::PlogManual),
             Self::DASHBOARD => Some(Example::Dashboard),
+            Self::DOT_REPL => Some(Example::DotRepl),
             _ => None,
         }
     }
@@ -74,6 +79,7 @@ impl Example {
             Example::Plog,
             Example::PlogManual,
             Example::Dashboard,
+            Example::DotRepl,
         ]
     }
 }
@@ -120,6 +126,7 @@ fn MyGraphViewer() -> Element {
                 Example::Plog => rsx! { PlogDiagram {} },
                 Example::PlogManual => rsx! { PlogManual {} },
                 Example::Dashboard => rsx! { Dashboard {} },
+                Example::DotRepl => rsx! { DotRepl {} },
             }
         }
     }

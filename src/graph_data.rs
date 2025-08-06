@@ -1,5 +1,6 @@
+use dioxus::logger::tracing;
 use dot_parser::{ast, canonical};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::{edge_renderer::EdgeData, rankdir::RankDir};
 
@@ -35,6 +36,8 @@ impl GraphData {
 
         // Create a node ID map to track all node IDs across subgraphs
         let mut node_id_map = HashMap::new();
+        // Track nodes that have been placed in subgraphs
+        let mut placed_nodes = HashSet::new();
 
         // Parse the graph recursively
         let mut graph = GraphData {
@@ -48,7 +51,13 @@ impl GraphData {
         };
 
         // Parse statements to build the graph structure
-        parse_statements(&ast_graph.stmts, &mut graph, "", &mut node_id_map);
+        parse_statements(
+            &ast_graph.stmts,
+            &mut graph,
+            "",
+            &mut node_id_map,
+            &mut placed_nodes,
+        );
 
         // Create canonical representation for edges
         let canonical_graph = canonical::Graph::from(ast_graph.clone());
@@ -61,19 +70,23 @@ impl GraphData {
             .iter()
             .map(|edge| {
                 // Get the actual node IDs as they exist in our structure
+                let source_orig = edge.from.trim_matches('"').to_string();
+                let target_orig = edge.to.trim_matches('"').to_string();
+
+                // Look up mapped IDs (these include the full path)
                 let source = node_id_map
                     .get(&edge.from)
-                    .unwrap_or(&edge.from)
+                    .unwrap_or(&source_orig)
                     .trim_matches('"')
                     .to_string();
                 let target = node_id_map
                     .get(&edge.to)
-                    .unwrap_or(&edge.to)
+                    .unwrap_or(&target_orig)
                     .trim_matches('"')
                     .to_string();
 
                 EdgeData {
-                    id: format!("{source}-{target}"),
+                    id: format!("{}-{}", source_orig, target_orig), // Use simpler IDs for edges
                     source,
                     target,
                     label: edge.attr.elems.iter().find_map(|(k, v)| {
@@ -94,6 +107,22 @@ impl GraphData {
     }
 }
 
+// Helper function to check if a node exists in the graph hierarchy
+fn node_exists_in_graph(graph: &GraphData, node_id: &str) -> bool {
+    // Check if node exists directly in this graph
+    if graph.nodes.iter().any(|n| n.id == node_id) {
+        return true;
+    }
+
+    // Check subgraphs recursively
+    for subgraph in &graph.subgraphs {
+        if node_exists_in_graph(subgraph, node_id) {
+            return true;
+        }
+    }
+
+    false
+}
 /// Parse DOT into GraphData
 pub fn parse_graph(dot: &str) -> Result<GraphData, String> {
     let ast_graph = dot_parser::ast::Graph::<(&str, &str)>::try_from(dot)
@@ -154,7 +183,8 @@ fn parse_statements(
     stmts: &ast::StmtList<Att>,
     graph: &mut GraphData,
     path_prefix: &str,
-    node_id_map: &mut HashMap<String, String>, // Map of original ID to node ID in our structure
+    node_id_map: &mut HashMap<String, String>,
+    placed_nodes: &mut HashSet<String>, // Track placed nodes
 ) {
     for stmt in stmts {
         match stmt {
@@ -171,6 +201,9 @@ fn parse_statements(
 
                 // Map the original ID to our node ID
                 node_id_map.insert(original_id.clone(), node_id.clone());
+
+                // Mark this node as placed
+                placed_nodes.insert(original_id.clone());
 
                 let node_label = node_stmt.attr.as_ref().and_then(|attr| {
                     attr.clone().flatten().into_iter().find_map(|(key, value)| {
@@ -221,6 +254,7 @@ fn parse_statements(
                     &mut sub_graph,
                     &new_path_prefix,
                     node_id_map,
+                    placed_nodes,
                 );
 
                 // Add the subgraph to the parent graph
