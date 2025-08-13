@@ -82,7 +82,18 @@ fn GraphContent<R: DotNodeRenderer + Clone + PartialEq + 'static>(
     props: GraphContentProps<R>,
 ) -> Element {
     let mut is_collapsed = use_signal(|| false);
-    let direction_class = props.graph.direction.flex_class();
+
+    // Calculate the nesting level to alternate flex direction
+    // Count the number of hyphens to determine nesting level
+    // e.g., "cluster_1-cluster_2-n3" has nesting level 2
+    let nesting_level = &props.graph.id.matches('-').count();
+
+    // Alternate flex-row and flex-col based on nesting level
+    let flex_direction = if nesting_level % 2 == 0 {
+        "flex-row" // Even levels: horizontal layout
+    } else {
+        "flex-col" // Odd levels: vertical layout
+    };
 
     let toggle_collapse = move |_| {
         is_collapsed.toggle();
@@ -98,7 +109,7 @@ fn GraphContent<R: DotNodeRenderer + Clone + PartialEq + 'static>(
         let base_class =
             "relative p-4 m-2 bg-slate-50 border-2 {style_class} border-slate-300 rounded-lg";
         if is_collapsed() {
-            format!("{} h-fit w-fit", base_class)
+            format!("{base_class} h-fit w-fit")
         } else {
             base_class.to_string()
         }
@@ -131,7 +142,8 @@ fn GraphContent<R: DotNodeRenderer + Clone + PartialEq + 'static>(
             // Conditionally render children
             if !is_collapsed() {
                 div {
-                    class: "flex {direction_class} gap-6 pt-4",
+                    // Use flexbox with wrapping and alternating direction
+                    class: "flex {flex_direction} flex-wrap gap-2 pt-4 w-fit justify-start items-start",
 
                     // Render subgraphs recursively
                     {props.graph.subgraphs.iter().map(|subgraph| {
@@ -143,12 +155,14 @@ fn GraphContent<R: DotNodeRenderer + Clone + PartialEq + 'static>(
                         }
                     })}
 
-                    // Render nodes in this graph level
+                    // Render nodes in this graph level with w-fit
                     {props.graph.nodes.iter().map(|node| {
                         rsx! {
                             div {
                                 id: "{node.id}",
                                 "data-node": "true",
+                                // Use w-fit to minimize width but ensure minimum readability
+                                class: "w-fit h-fit",
                                 {props.renderer.render_node(node)}
                             }
                         }
