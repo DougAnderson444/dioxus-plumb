@@ -63,7 +63,8 @@ pub fn DotGraph<R: DotNodeRenderer + Clone + PartialEq + 'static>(
                 edges: graph.edges.clone(),
                 GraphContent {
                     graph: graph,
-                    renderer: props.renderer.clone()
+                    renderer: props.renderer.clone(),
+                    collapsed: Some(false)
                 }
             }
         }
@@ -74,6 +75,7 @@ pub fn DotGraph<R: DotNodeRenderer + Clone + PartialEq + 'static>(
 struct GraphContentProps<R: DotNodeRenderer + Clone + PartialEq + 'static> {
     graph: GraphData,
     renderer: R,
+    collapsed: Option<bool>,
 }
 
 /// Helper component to recursively render graph content
@@ -81,7 +83,7 @@ struct GraphContentProps<R: DotNodeRenderer + Clone + PartialEq + 'static> {
 fn GraphContent<R: DotNodeRenderer + Clone + PartialEq + 'static>(
     props: GraphContentProps<R>,
 ) -> Element {
-    let mut is_collapsed = use_signal(|| false);
+    let mut is_collapsed = use_signal(|| props.collapsed.unwrap_or(true));
 
     // Calculate the nesting level to alternate flex direction
     // Count the number of hyphens to determine nesting level
@@ -117,6 +119,13 @@ fn GraphContent<R: DotNodeRenderer + Clone + PartialEq + 'static>(
         "".to_string()
     };
 
+    // concat label with collapsed icon
+    let label = format!(
+        "{}{}",
+        props.graph.label.as_deref().unwrap_or(""),
+        if is_collapsed() { " [+] " } else { " [-] " }
+    );
+
     // Main container for the graph or subgraph
     rsx! {
         div {
@@ -125,16 +134,12 @@ fn GraphContent<R: DotNodeRenderer + Clone + PartialEq + 'static>(
             "data-subgraph": if props.graph.id.starts_with("cluster_") { "true" } else { "false" },
 
             // Clickable label for collapsing/expanding subgraphs
-            if let Some(label) = &props.graph.label {
+            if props.graph.label.is_some() {
                 if props.graph.id.starts_with("cluster_") {
                     div {
-                        class: "absolute -top-3 left-4 px-2 bg-slate-50 text-sm font-bold cursor-pointer select-none",
+                        class: "absolute -top-3 left-4 px-2 bg-slate-50 text-sm font-bold cursor-pointer select-none whitespace-nowrap z-10",
                         onclick: toggle_collapse,
                         "{label}",
-                        span {
-                            class: "mr-2",
-                            if is_collapsed() { " [+] " } else { " [-] " }
-                        }
                     }
                 }
             }
@@ -150,7 +155,8 @@ fn GraphContent<R: DotNodeRenderer + Clone + PartialEq + 'static>(
                         rsx! {
                             GraphContent {
                                 graph: subgraph.clone(),
-                                renderer: props.renderer.clone()
+                                renderer: props.renderer.clone(),
+                                collapsed: None
                             }
                         }
                     })}
