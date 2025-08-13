@@ -64,11 +64,10 @@ impl DotNodeRenderer for InteractiveNodeRenderer {
         let label = node.label.as_deref().unwrap_or(&node.id);
         let on_click = self.on_node_click;
 
-        let style = "border-gray-300 p-4 hover:bg-blue-50";
-
+        // More compact styling that works well with w-fit
         rsx! {
             div {
-                class: "bg-white border {style} rounded-lg p-3 shadow-md hover:shadow-lg transition-all duration-200 min-w-[120px] cursor-pointer",
+                class: "bg-white border border-gray-300 rounded-lg p-2 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer text-center w-fit mx-auto",
                 onclick: move |_| {
                     if let Some(handler) = &on_click {
                         handler.call(node_id.clone());
@@ -76,8 +75,11 @@ impl DotNodeRenderer for InteractiveNodeRenderer {
                 },
 
                 div {
-                    class: "font-medium",
-                    "{label}"
+                    class: "font-medium text-sm break-words",
+                    pre {
+                        class: "whitespace-pre-wrap",
+                        "{label}"
+                    }
                 }
             }
         }
