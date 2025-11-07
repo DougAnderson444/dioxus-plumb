@@ -26,7 +26,7 @@ jobs:
           npm ci
 
       - name: Build CSS
-        run: npx @tailwindcss/cli@3.4.17 -i ./tailwind.css -o ./assets/tailwind.css
+        run: npx tailwindcss -i ./tailwind.css -o ./assets/tailwind.css
 
       - name: Build web app
         run: dx bundle --out-dir docs
