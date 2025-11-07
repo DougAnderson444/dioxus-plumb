@@ -103,6 +103,21 @@ impl GraphData {
         // Store all edges at the top level
         graph.edges = edge_data;
 
+        // Add implicit nodes for any node id referenced in edges but not already present
+        let mut existing_node_ids: HashSet<String> =
+            graph.nodes.iter().map(|n| n.id.clone()).collect();
+        for edge in &graph.edges {
+            for node_id in [&edge.source, &edge.target] {
+                if !existing_node_ids.contains(node_id) {
+                    graph.nodes.push(NodeData {
+                        id: node_id.clone(),
+                        label: None, // Will default to id in renderer
+                    });
+                    existing_node_ids.insert(node_id.clone());
+                }
+            }
+        }
+
         graph
     }
 }

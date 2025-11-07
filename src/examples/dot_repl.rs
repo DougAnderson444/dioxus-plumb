@@ -16,6 +16,7 @@ pub fn DotRepl() -> Element {
     let mut dot_input = use_signal(|| {
         String::from(
             r#"digraph G {
+    A [label="Box A"];
     A -> B;
     B -> C;
     C -> A;
