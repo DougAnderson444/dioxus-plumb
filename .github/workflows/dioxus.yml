@@ -13,8 +13,8 @@ jobs:
 
       - uses: cargo-bins/cargo-binstall@main
 
-      - name: Binstall dioxus-cli
-        run: cargo binstall --no-confirm dioxus-cli
+      - name: Binstall dioxus-cli ver 6
+        run: cargo binstall --no-confirm dioxus-cli@6
         
       - name: Setup Node.js
         uses: actions/setup-node@v4
