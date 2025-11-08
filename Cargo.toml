@@ -23,6 +23,8 @@ dot-parser = "0.5.1"
 
 serde = { version = "1.0", features = ["derive"], optional = true }
 serde_json = { version = "1.0", optional = true }
+# Quadtree implementation for Rect collision avoidance
+quadtree_rs = "0.1.3"
 
 [dependencies.dioxus-sdk]
 version = "0.6"

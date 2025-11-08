@@ -27,8 +27,8 @@ pub fn DotRepl() -> Element {
     // State for error messages and parsed data
     let mut error = use_signal(|| Option::<String>::None);
     let mut graph_data = use_signal(|| Option::<GraphData>::None);
-    let mut edges = use_signal(|| Vec::<EdgeData>::new());
-    let mut node_ids = use_signal(|| HashSet::<String>::new());
+    let mut edges = use_signal(Vec::<EdgeData>::new);
+    let mut node_ids = use_signal(HashSet::<String>::new);
 
     // Function to parse DOT and extract nodes/edges
     let mut parse_dot = move || {

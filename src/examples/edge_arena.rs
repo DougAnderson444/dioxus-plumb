@@ -44,6 +44,7 @@ pub fn EdgeArenaExample() -> Element {
              // EdgeArena is the container for the nodes and edges
              EdgeArena {
                  edges: graph_data.edges,
+                 node_ids: nodes.iter().map(|&node| node.to_string()).collect(),
                  div {
                      class: "flex flex-col gap-12",
                      "Describe the edges using DOT, but render nodes using Dioxus components",

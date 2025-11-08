@@ -61,6 +61,7 @@ pub fn DotGraph<R: DotNodeRenderer + Clone + PartialEq + 'static>(
 
             EdgeArena {
                 edges: graph.edges.clone(),
+                node_ids: graph.nodes.iter().map(|n| n.id.clone()).collect(),
                 GraphContent {
                     graph: graph,
                     renderer: props.renderer.clone(),

@@ -1,7 +1,9 @@
 //! Draw svg Edges between nodes in a graph
 use crate::perfect_arrows::{get_box_to_box_arrow, ArrowOptions, Pos2, Vec2};
-use dioxus::logger::tracing;
 use dioxus::prelude::*;
+use quadtree_rs::area::{Area, AreaBuilder};
+use quadtree_rs::point::Point;
+use quadtree_rs::Quadtree;
 use std::f64::consts::PI;
 
 // /// edge-arena const string slice
@@ -35,9 +37,42 @@ struct EdgeSvgData {
     label_y: f64,
 }
 
+/// Represents a straight line segment
+#[derive(Clone, Copy)]
+struct Segment {
+    start: (f32, f32),
+    end: (f32, f32),
+}
+
+/// Axis-aligned bounding box
+#[derive(Clone, Copy)]
+struct BoundingBox {
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+}
+
+impl BoundingBox {
+    fn contains_point(&self, px: f32, py: f32) -> bool {
+        px >= self.x && px <= self.x + self.width && py >= self.y && py <= self.y + self.height
+    }
+
+    pub fn area(&self) -> Area<u32> {
+        AreaBuilder::default()
+            .anchor(Point {
+                x: self.x as u32,
+                y: self.y as u32,
+            })
+            .dimensions((self.width as u32, self.height as u32))
+            .build()
+            .unwrap()
+    }
+}
+
 /// Arena that shows the Edges overlaid on the children
 #[component]
-pub fn EdgeArena(edges: Vec<EdgeData>, children: Element) -> Element {
+pub fn EdgeArena(edges: Vec<EdgeData>, node_ids: Vec<String>, children: Element) -> Element {
     rsx! {
         div {
             class: "relative w-full h-full",
@@ -50,7 +85,8 @@ pub fn EdgeArena(edges: Vec<EdgeData>, children: Element) -> Element {
                 {edges.iter().map(|edge| {
                     rsx! {
                         EdgeRenderer {
-                            edge: edge.clone()
+                            edge: edge.clone(),
+                            node_ids: node_ids.clone()
                         }
                     }
                 })}
@@ -59,9 +95,75 @@ pub fn EdgeArena(edges: Vec<EdgeData>, children: Element) -> Element {
     }
 }
 
+// Helper to build arrow segments from start, center, end
+fn build_arrow_segments(start: Pos2, center: Pos2, end: Pos2) -> [Segment; 2] {
+    [
+        Segment {
+            start: (start.x as f32, start.y as f32),
+            end: (center.x as f32, center.y as f32),
+        },
+        Segment {
+            start: (center.x as f32, center.y as f32),
+            end: (end.x as f32, end.y as f32),
+        },
+    ]
+}
+
+// Count collisions for an arrow path
+fn arrow_collision_count(
+    quadtree: &Quadtree<u32, BoundingBox>,
+    arrow_segments: &[Segment],
+) -> usize {
+    let mut count = 0;
+    for seg in arrow_segments {
+        let min_x = seg.start.0.min(seg.end.0);
+        let min_y = seg.start.1.min(seg.end.1);
+        let max_x = seg.start.0.max(seg.end.0);
+        let max_y = seg.start.1.max(seg.end.1);
+        let seg_bbox = BoundingBox {
+            x: min_x,
+            y: min_y,
+            width: max_x - min_x,
+            height: max_y - min_y,
+        };
+        for entry in quadtree.query(seg_bbox.area()) {
+            let node_rect = entry.value_ref();
+            if segment_intersects_rect(seg, node_rect) {
+                count += 1;
+            }
+        }
+    }
+    count
+}
+
+// Choose the best arrow flip based on collision count
+fn choose_best_arrow_flip(
+    start: Pos2,
+    start_size: Vec2,
+    end: Pos2,
+    end_size: Vec2,
+    quadtree: &Quadtree<u32, BoundingBox>,
+) -> bool {
+    let mut best_flip = false;
+    let mut min_collisions = usize::MAX;
+
+    for &flip in &[false, true] {
+        let options = ArrowOptions::with_flip(flip);
+        let (start_p, center_p, end_p, _, _, _) =
+            get_box_to_box_arrow(start, start_size, end, end_size, options);
+        let segments = build_arrow_segments(start_p, center_p, end_p);
+        let collisions = arrow_collision_count(quadtree, &segments);
+        if collisions < min_collisions {
+            min_collisions = collisions;
+            best_flip = flip;
+        }
+    }
+    best_flip
+}
+
 /// A simple component wrapper for edge rendering
 #[component]
-pub fn EdgeRenderer(edge: EdgeData) -> Element {
+pub fn EdgeRenderer(edge: EdgeData, node_ids: Vec<String>) -> Element {
     let mut svg_data = use_signal(|| None::<EdgeSvgData>);
 
     // Calculate the arrow path when the component mounts
@@ -70,9 +172,9 @@ pub fn EdgeRenderer(edge: EdgeData) -> Element {
         // Small delay to ensure elements are rendered
         gloo_timers::future::TimeoutFuture::new(100).await;
 
-        generate_arrow_path_safe(&edge_clone)
+        generate_arrow_path_safe(&edge_clone, &node_ids)
             .map(|data| svg_data.set(Some(data)))
-            .unwrap_or_else(|err| {
+            .unwrap_or_else(|_err| {
                 // tracing::error!("Error calculating edge {}: {}", edge_clone.id, err);
                 svg_data.set(None);
             });
@@ -133,7 +235,7 @@ pub fn EdgeRenderer(edge: EdgeData) -> Element {
     }
 }
 
-fn generate_arrow_path_safe(edge: &EdgeData) -> Result<EdgeSvgData, String> {
+fn generate_arrow_path_safe(edge: &EdgeData, node_ids: &[String]) -> Result<EdgeSvgData, String> {
     let window = web_sys::window().ok_or("No window")?;
     let document = window.document().ok_or("No document")?;
 
@@ -158,7 +260,7 @@ fn generate_arrow_path_safe(edge: &EdgeData) -> Result<EdgeSvgData, String> {
     let content = get_coords(&content_el);
 
     // Calculate positions relative to the content container
-    // This is the key change - we use the content container as the reference
+    // We use the content container as the reference
     let x_0 = source.left - content.left;
     let y_0 = source.top - content.top;
     let x_1 = target.left - content.left;
@@ -169,13 +271,28 @@ fn generate_arrow_path_safe(edge: &EdgeData) -> Result<EdgeSvgData, String> {
     let w_1 = target.right - target.left;
     let h_1 = target.bottom - target.top;
 
-    let start = Pos2 { x: x_0, y: y_0 }; // Use top-left instead of center
-    let end = Pos2 { x: x_1, y: y_1 }; // Use top-left instead of center
+    let start = Pos2 { x: x_0, y: y_0 }; // Use top-left
+    let end = Pos2 { x: x_1, y: y_1 }; // Use top-left
 
     let start_size = Vec2 { x: w_0, y: h_0 };
     let end_size = Vec2 { x: w_1, y: h_1 };
 
-    let options = ArrowOptions::default();
+    // Build quadtree from all node bounding boxes
+    let mut quadtree = Quadtree::<u32, BoundingBox>::new(12); // 12 levels for large graphs
+    for node_id in node_ids.iter() {
+        if let Some(node_el) = document.get_element_by_id(node_id) {
+            let rect = get_coords(&node_el);
+            let bbox = BoundingBox {
+                x: rect.left as f32,
+                y: rect.top as f32,
+                width: rect.width as f32,
+                height: rect.height as f32,
+            };
+            quadtree.insert(bbox.area(), bbox);
+        }
+    }
+    let use_flip = choose_best_arrow_flip(start, start_size, end, end_size, &quadtree);
+    let options = ArrowOptions::with_flip(use_flip);
 
     let (
         Pos2 { x: sx, y: sy },
@@ -257,4 +374,72 @@ fn get_coords(el: &web_sys::Element) -> Rect {
         width: rect.width(),
         height: rect.height(),
     }
+}
+
+// Check if a segment intersects a rectangle (simple version)
+fn segment_intersects_rect(seg: &Segment, rect: &BoundingBox) -> bool {
+    // Check if either endpoint is inside the rect
+    if rect.contains_point(seg.start.0, seg.start.1) || rect.contains_point(seg.end.0, seg.end.1) {
+        return true;
+    }
+    // Check for intersection with each edge of the rectangle
+    let edges = [
+        Segment {
+            start: (rect.x, rect.y),
+            end: (rect.x + rect.width, rect.y),
+        }, // top
+        Segment {
+            start: (rect.x, rect.y),
+            end: (rect.x, rect.y + rect.height),
+        }, // left
+        Segment {
+            start: (rect.x + rect.width, rect.y),
+            end: (rect.x + rect.width, rect.y + rect.height),
+        }, // right
+        Segment {
+            start: (rect.x, rect.y + rect.height),
+            end: (rect.x + rect.width, rect.y + rect.height),
+        }, // bottom
+    ];
+    for edge in &edges {
+        if segments_intersect(seg, edge) {
+            return true;
+        }
+    }
+    false
+}
+
+// Helper: Check if two segments intersect
+fn segments_intersect(a: &Segment, b: &Segment) -> bool {
+    fn ccw(p1: (f32, f32), p2: (f32, f32), p3: (f32, f32)) -> bool {
+        (p3.1 - p1.1) * (p2.0 - p1.0) > (p2.1 - p1.1) * (p3.0 - p1.0)
+    }
+    let (a1, a2) = (a.start, a.end);
+    let (b1, b2) = (b.start, b.end);
+    (ccw(a1, b1, b2) != ccw(a2, b1, b2)) && (ccw(a1, a2, b1) != ccw(a1, a2, b2))
+}
+
+// Example: Check collisions for an arrow path
+fn arrow_collides(quadtree: &Quadtree<u32, BoundingBox>, arrow_segments: &[Segment]) -> bool {
+    for seg in arrow_segments {
+        // Create bounding box for segment
+        let min_x = seg.start.0.min(seg.end.0);
+        let min_y = seg.start.1.min(seg.end.1);
+        let max_x = seg.start.0.max(seg.end.0);
+        let max_y = seg.start.1.max(seg.end.1);
+        let seg_bbox = BoundingBox {
+            x: min_x,
+            y: min_y,
+            width: max_x - min_x,
+            height: max_y - min_y,
+        };
+        // Query quadtree for nearby nodes
+        for entry in quadtree.query(seg_bbox.area()) {
+            let node_rect = entry.value_ref();
+            if segment_intersects_rect(seg, node_rect) {
+                return true; // Collision detected
+            }
+        }
+    }
+    false
 }

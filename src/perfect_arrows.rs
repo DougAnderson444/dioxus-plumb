@@ -2,6 +2,7 @@ mod utils;
 use utils::*;
 pub use utils::{Pos2, Vec2};
 
+
 use std::f64::consts::PI;
 
 const PI2: f64 = PI * 2.0;
@@ -44,6 +45,17 @@ impl Default for ArrowOptions {
         }
     }
 }
+
+impl ArrowOptions {
+    /// Default with flip as the given value
+    pub fn with_flip(flip: bool) -> Self {
+        ArrowOptions {
+            flip,
+            ..Default::default()
+        }
+    }
+}
+
 pub fn get_box_to_box_arrow(
     start: Pos2,
     start_size: Vec2,

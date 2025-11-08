@@ -138,6 +138,7 @@ pub fn Dashboard() -> Element {
              // EdgeArena is the container for the nodes and edges
              EdgeArena {
                  edges: graph_data.edges,
+                 node_ids: graph_data.nodes.iter().map(|n| n.id.clone()).collect(),
                  div {
                      class: "flex flex-col gap-12",
                      "Dashboard",

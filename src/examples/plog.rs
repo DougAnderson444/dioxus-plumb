@@ -215,6 +215,7 @@ Seqno 1", nodetype="Head"];
 
             EdgeArena {
                 edges: graph_data.edges.clone(),
+                node_ids: graph_data.nodes.iter().map(|n| n.id.clone()).collect(),
                 Graph {
                     graph: graph_data
                 }
